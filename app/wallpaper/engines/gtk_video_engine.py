@@ -65,6 +65,7 @@ class GtkVideoWallpaperEngine(BaseWallpaperEngine):
             return False
 
         self.stop()
+        self._kill_all_existing_workers()
         options = options or {}
         fps = options.get("max_fps", 30)
         hwdec = "auto" if options.get("hw_decoding", True) else "no"
@@ -137,16 +138,29 @@ class GtkVideoWallpaperEngine(BaseWallpaperEngine):
                         os.killpg(os.getpgid(self._proc.pid), signal.SIGTERM)
                     else:
                         self._proc.terminate()
-                    self._proc.wait(timeout=1.5)
+                    self._proc.wait(timeout=1.0)
             except Exception:
                 try:
                     self._proc.kill()
                 except Exception:
                     pass
             self._proc = None
+        self._kill_all_existing_workers()
         self._current_wallpaper = None
         self._is_paused = False
         return True
+
+    @staticmethod
+    def _kill_all_existing_workers() -> None:
+        try:
+            subprocess.run(["pkill", "-9", "-f", "video_bg_worker.py"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            for sock in Path("/tmp").glob("wallpapermaison_mpv*.sock"):
+                try:
+                    sock.unlink()
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
     def get_status(self) -> Dict[str, Any]:
         is_running = bool(self._proc and self._proc.poll() is None)

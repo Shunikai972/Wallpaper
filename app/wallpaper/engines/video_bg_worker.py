@@ -21,6 +21,8 @@ gi.require_version("Gdk", "3.0")
 gi.require_version("GdkX11", "3.0")
 from gi.repository import Gtk, Gdk, GdkX11, GLib
 
+PID_FILE = "/tmp/wallpapermaison_worker.pid"
+
 class VideoBackgroundWorker:
     def __init__(self, video_path: str, fps: int = 30, hwdec: str = "auto", ipc_socket: str = "/tmp/wallpapermaison_mpv.sock") -> None:
         self.video_path = video_path
@@ -29,6 +31,28 @@ class VideoBackgroundWorker:
         self.ipc_socket = ipc_socket
         self.mpv_proc = None
         self.window = None
+        self._ensure_singleton()
+
+    def _ensure_singleton(self) -> None:
+        """Empêche strictement la superposition de plusieurs vidéos en arrière-plan."""
+        if os.path.exists(PID_FILE):
+            try:
+                with open(PID_FILE, "r") as f:
+                    old_pid = int(f.read().strip())
+                if old_pid != os.getpid():
+                    try:
+                        os.kill(old_pid, signal.SIGTERM)
+                        time.sleep(0.15)
+                        os.kill(old_pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+            except Exception:
+                pass
+        try:
+            with open(PID_FILE, "w") as f:
+                f.write(str(os.getpid()))
+        except Exception:
+            pass
 
     def _get_mpv_command(self, xid: int) -> list:
         if shutil.which("mpv"):
@@ -44,8 +68,9 @@ class VideoBackgroundWorker:
             "--no-osc",
             "--no-osd-bar",
             "--input-default-bindings=no",
-            "--input-cursor=no",
-            "--input-vo-keyboard=no",
+            "--cursor-autohide=no",
+            "--no-ontop",
+            "--no-keepaspect-window",
             f"--hwdec={self.hwdec}",
             f"--override-display-fps={self.fps}",
             f"--input-ipc-server={self.ipc_socket}",
@@ -61,28 +86,31 @@ class VideoBackgroundWorker:
             except Exception:
                 pass
 
-        # Calcul des dimensions totales des écrans
+        # Calcul de la zone de travail (workarea) pour préserver la visibilité des barres GNOME :
+        # - La barre du haut (menu 'Applications' et 'Emplacements' / dossiers & fichiers)
+        # - La barre du bas (liste des applications ouvertes)
         display = Gdk.Display.get_default()
         n_monitors = display.get_n_monitors() if display else 1
-        min_x, min_y, max_x, max_y = 0, 0, 1920, 1080
+        min_x, min_y, max_x, max_y = 0, 32, 1920, 1080
         if display:
             for i in range(n_monitors):
                 m = display.get_monitor(i)
                 if m:
-                    g = m.get_geometry()
-                    min_x = min(min_x, g.x)
-                    min_y = min(min_y, g.y)
-                    max_x = max(max_x, g.x + g.width)
-                    max_y = max(max_y, g.y + g.height)
+                    w_area = m.get_workarea()
+                    min_x = min(min_x, w_area.x)
+                    min_y = min(min_y, w_area.y)
+                    max_x = max(max_x, w_area.x + w_area.width)
+                    max_y = max(max_y, w_area.y + w_area.height)
 
         total_width = max(max_x - min_x, 1920)
-        total_height = max(max_y - min_y, 1080)
+        total_height = max(max_y - min_y, 1048)
 
-        # Fenêtre placée au niveau DESKTOP (fond d'écran) en dessous de toutes les applications
+        # Fenêtre placée au niveau DESKTOP (fond d'écran) strictement en dessous des applications
         self.window = Gtk.Window(type=Gtk.WindowType.TOPLEVEL)
         self.window.set_type_hint(Gdk.WindowTypeHint.DESKTOP)
         self.window.set_title("WallpaperMaison_Background")
         self.window.set_keep_below(True)
+        self.window.stick()
         self.window.set_skip_taskbar_hint(True)
         self.window.set_skip_pager_hint(True)
         self.window.set_accept_focus(False)
@@ -94,6 +122,12 @@ class VideoBackgroundWorker:
         self.window.realize()
 
         gdk_win = self.window.get_window()
+
+        # Rendre le curseur de souris toujours visible avec le pointeur standard du système
+        if display:
+            cursor = Gdk.Cursor.new_from_name(display, "default")
+            if cursor:
+                gdk_win.set_cursor(cursor)
 
         # Rendre la fenêtre complètement transparente aux clics souris (click-through)
         # Tous les clics (clic droit sur le bureau pour ouvrir le menu GNOME,
@@ -108,7 +142,7 @@ class VideoBackgroundWorker:
 
         # Forcer la fenêtre tout en bas de la pile de fenêtres
         gdk_win.lower()
-        self.window.show_all()
+        self.window.show()
         gdk_win.lower()
 
         xid = gdk_win.get_xid()
@@ -123,11 +157,23 @@ class VideoBackgroundWorker:
             signal.signal(signal.SIGUSR2, self._on_signal_resume)
 
         GLib.timeout_add(1000, self._check_mpv_alive)
+        GLib.timeout_add(2000, self._keep_window_below)
 
         try:
             Gtk.main()
         finally:
             self._cleanup()
+
+    def _keep_window_below(self) -> bool:
+        """Garantit que la vidéo reste toujours en fond d'écran sans recouvrir les fenêtres."""
+        if self.window:
+            gdk_win = self.window.get_window()
+            if gdk_win:
+                try:
+                    gdk_win.lower()
+                except Exception:
+                    pass
+        return True
 
     def _check_mpv_alive(self) -> bool:
         if self.mpv_proc and self.mpv_proc.poll() is not None:
