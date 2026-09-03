@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WallpaperMaison - Alternative Wallpaper Engine pour Fedora</title>
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/pages.css">
+</head>
+<body>
+  <div id="app-container">
+    <!-- Sidebar Moderne -->
+    <aside id="sidebar">
+      <div class="sidebar-header">
+        <img class="sidebar-logo" src="assets/logo.svg" alt="WallpaperMaison Logo">
+        <div>
+          <div class="sidebar-title">WallpaperMaison</div>
+          <span class="sidebar-version">v1.0.0 FEDORA</span>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-section-title">Navigation</div>
+        <a class="nav-item active" data-view="dashboard">
+          <svg class="nav-icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1"></rect><rect x="14" y="3" width="7" height="5" rx="1"></rect><rect x="14" y="12" width="7" height="9" rx="1"></rect><rect x="3" y="16" width="7" height="5" rx="1"></rect></svg>
+          <span>Vue d'ensemble</span>
+        </a>
+        <a class="nav-item" data-view="library">
+          <svg class="nav-icon" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+          <span>Bibliothèque</span>
+        </a>
+        <a class="nav-item" data-view="preview">
+          <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polygon points="10 8 16 12 10 16 10 8"></polygon></svg>
+          <span>Aperçu & Cadrage</span>
+        </a>
+        <a class="nav-item" data-view="editor">
+          <svg class="nav-icon" viewBox="0 0 24 24"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+          <span>Traitement d'Image</span>
+        </a>
+
+        <div class="nav-section-title">Gestion & Système</div>
+        <a class="nav-item" data-view="playlists">
+          <svg class="nav-icon" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+          <span>Playlists</span>
+        </a>
+        <a class="nav-item" data-view="automations">
+          <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+          <span>Automatisations</span>
+        </a>
+        <a class="nav-item" data-view="monitors">
+          <svg class="nav-icon" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+          <span>Multi-Écrans</span>
+        </a>
+        <a class="nav-item" data-view="settings">
+          <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+          <span>Paramètres & Diag</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="quick-profile-badge">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <div class="profile-dot"></div>
+            <span style="font-weight:600;" id="sidebar-active-profile">Balanced</span>
+          </div>
+          <span style="font-size:11px; color:var(--text-muted);">30 FPS</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Zone principale -->
+    <main id="main-content">
+      <!-- Topbar -->
+      <header id="topbar">
+        <div class="topbar-title" id="topbar-page-title">Vue d'ensemble</div>
+        <div class="topbar-actions">
+          <button class="btn btn-secondary" id="topbar-import-btn" onclick="window.router.navigate('library'); document.getElementById('library-import-files-btn').click();">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+            <span>Importer</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- Viewport des vues -->
+      <div id="views-viewport">
+        <!-- VUE: DASHBOARD -->
+        <section id="view-dashboard" class="view-panel active">
+          <div class="dashboard-hero">
+            <div class="dashboard-hero-bg" id="dashboard-hero-bg"></div>
+            <div class="dashboard-hero-content">
+              <div>
+                <div class="now-playing-label">
+                  <div class="pulse-dot"></div>
+                  <span>Fond d'écran actuel</span>
+                </div>
+                <h1 class="now-playing-title" id="now-playing-name">Chargement...</h1>
+                <div class="now-playing-meta" id="now-playing-meta-info">Analyse de la configuration...</div>
+              </div>
+              <div class="hero-actions">
+                <button class="btn btn-secondary" id="hero-prev-btn" title="Fond précédent">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5" stroke-width="2" stroke="currentColor"></line></svg>
+                </button>
+                <button class="btn btn-secondary" id="hero-pause-btn" title="Mettre en pause">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+                  <span>Pause</span>
+                </button>
+                <button class="btn btn-secondary" id="hero-next-btn" title="Fond suivant">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19" stroke-width="2" stroke="currentColor"></line></svg>
+                  <span>Suivant</span>
+                </button>
+                <button class="btn btn-icon btn-secondary" id="hero-fav-btn" title="Favori">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Widgets Dashboard -->
+          <div class="dashboard-widgets">
+            <!-- Statistiques & État -->
+            <div class="widget-card">
+              <div class="widget-header">
+                <div class="widget-title">Statistiques de la Collection</div>
+              </div>
+              <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:16px;">
+                <div style="background:var(--bg-surface-raised); padding:16px; border-radius:var(--radius-md); border:1px solid var(--border-subtle);">
+                  <div style="font-size:12px; color:var(--text-muted); margin-bottom:4px;">Total Fonds d'écran</div>
+                  <div style="font-size:24px; font-weight:700; color:var(--text-primary);" id="dashboard-stat-total">0</div>
+                </div>
+                <div style="background:var(--bg-surface-raised); padding:16px; border-radius:var(--radius-md); border:1px solid var(--border-subtle);">
+                  <div style="font-size:12px; color:var(--text-muted); margin-bottom:4px;">Favoris</div>
+                  <div style="font-size:24px; font-weight:700; color:var(--accent-secondary);" id="dashboard-stat-favs">0</div>
+                </div>
+                <div style="background:var(--bg-surface-raised); padding:16px; border-radius:var(--radius-md); border:1px solid var(--border-subtle);">
+                  <div style="font-size:12px; color:var(--text-muted); margin-bottom:4px;">Vidéos & GIFs</div>
+                  <div style="font-size:24px; font-weight:700; color:var(--accent-primary);" id="dashboard-stat-videos">0</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Rotation & Minuteur -->
+            <div class="widget-card">
+              <div class="widget-header">
+                <div class="widget-title">Prochain Changement</div>
+              </div>
+              <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; padding:10px 0; gap:8px;">
+                <div style="font-size:32px; font-weight:700; font-family:var(--font-mono); color:var(--accent-primary);" id="dashboard-countdown-text">5:00</div>
+                <div style="font-size:12px; color:var(--text-muted);">Rotation automatique active</div>
+              </div>
+              <div style="display:flex; justify-content:center;">
+                <button class="btn btn-secondary" onclick="window.router.navigate('playlists');" style="width:100%; font-size:12px;">Gérer les playlists</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- VUE: LIBRARY -->
+        <section id="view-library" class="view-panel">
+          <div class="library-toolbar">
+            <div class="toolbar-top-row">
+              <div class="search-wrapper">
+                <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                <input type="text" id="library-search-input" class="search-input" placeholder="Rechercher par nom ou tag...">
+              </div>
+
+              <div class="filter-tabs">
+                <div class="filter-tab active" data-type="all">Tous</div>
+                <div class="filter-tab" data-type="image">Images</div>
+                <div class="filter-tab" data-type="gif">GIFs</div>
+                <div class="filter-tab" data-type="video">Vidéos</div>
+              </div>
+
+              <div style="display:flex; align-items:center; gap:8px;">
+                <select id="library-sort-select" class="btn btn-secondary" style="outline:none; cursor:pointer;">
+                  <option value="created_desc">Récemment ajouté</option>
+                  <option value="last_applied">Dernière utilisation</option>
+                  <option value="name_asc">Nom (A-Z)</option>
+                  <option value="size_desc">Taille de fichier</option>
+                  <option value="resolution">Résolution</option>
+                  <option value="duration">Durée vidéo</option>
+                  <option value="favorite">Favoris en premier</option>
+                </select>
+
+                <div class="filter-tabs">
+                  <button class="view-mode-btn active btn-icon" data-mode="grid" title="Grille">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                  </button>
+                  <button class="view-mode-btn btn-icon" data-mode="compact" title="Grille compacte">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="2" y="2" width="5" height="5"></rect><rect x="9.5" y="2" width="5" height="5"></rect><rect x="17" y="2" width="5" height="5"></rect><rect x="2" y="9.5" width="5" height="5"></rect><rect x="9.5" y="9.5" width="5" height="5"></rect><rect x="17" y="9.5" width="5" height="5"></rect></svg>
+                  </button>
+                  <button class="view-mode-btn btn-icon" data-mode="list" title="Liste détaillée">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><line x1="8" y1="6" x2="21" y2="6" stroke-width="2" stroke="currentColor"></line><line x1="8" y1="12" x2="21" y2="12" stroke-width="2" stroke="currentColor"></line><line x1="8" y1="18" x2="21" y2="18" stroke-width="2" stroke="currentColor"></line><circle cx="4" cy="6" r="2"></circle><circle cx="4" cy="12" r="2"></circle><circle cx="4" cy="18" r="2"></circle></svg>
+                  </button>
+                </div>
+
+                <button class="btn btn-primary" id="library-import-files-btn">
+                  <span>+ Fichiers</span>
+                </button>
+                <button class="btn btn-secondary" id="library-import-folder-btn">
+                  <span>Dossier</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Tags rapides -->
+            <div class="tags-scroll-row" id="library-tags-row"></div>
+          </div>
+
+          <!-- Conteneur de grille / liste des fonds d'écran -->
+          <div id="library-wallpapers-container" class="wallpaper-grid"></div>
+        </section>
+
+        <!-- VUE: PREVIEW -->
+        <section id="view-preview" class="view-panel">
+          <div class="preview-container">
+            <div class="preview-display-box">
+              <img id="preview-image-display" class="preview-media-element" style="display:none;" alt="Aperçu">
+              <video id="preview-video-player" class="preview-media-element" loop playsinline style="display:none;"></video>
+
+              <!-- Contrôles vidéo overlay -->
+              <div class="preview-video-controls" id="preview-video-controls-box" style="display:none;">
+                <button class="btn btn-icon btn-ghost" id="preview-play-pause-btn">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                </button>
+                <input type="range" id="preview-timeline" min="0" max="100" value="0" style="flex:1;">
+                <input type="range" id="preview-volume" min="0" max="100" value="80" style="width:70px;">
+              </div>
+            </div>
+
+            <!-- Panneau latéral inspecteur -->
+            <div class="preview-sidebar">
+              <div>
+                <h3 style="font-size:16px; font-weight:700; margin-bottom:4px;" id="preview-spec-name">Nom du fichier</h3>
+                <span class="badge badge-video" id="preview-spec-type">VIDÉO</span>
+              </div>
+
+              <!-- Sélecteur de Cadrage -->
+              <div>
+                <label style="font-size:12px; color:var(--text-secondary); display:block; margin-bottom:8px;">Mode de Cadrage :</label>
+                <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:6px;">
+                  <button class="btn btn-secondary fit-mode-btn active" data-fit="fill">Fill</button>
+                  <button class="btn btn-secondary fit-mode-btn" data-fit="fit">Fit</button>
+                  <button class="btn btn-secondary fit-mode-btn" data-fit="stretch">Stretch</button>
+                  <button class="btn btn-secondary fit-mode-btn" data-fit="center">Center</button>
+                  <button class="btn btn-secondary fit-mode-btn" data-fit="crop">Crop</button>
+                </div>
+              </div>
+
+              <!-- Comparaison Résolutions -->
+              <div style="background:var(--bg-surface-raised); padding:16px; border-radius:var(--radius-md); border:1px solid var(--border-subtle); font-size:12.5px; display:flex; flex-direction:column; gap:8px;">
+                <div style="display:flex; justify-content:space-between;">
+                  <span style="color:var(--text-muted);">Résolution Média :</span>
+                  <strong id="preview-spec-res">3840 x 2160</strong>
+                </div>
+                <div style="display:flex; justify-content:space-between;">
+                  <span style="color:var(--text-muted);">Résolution Écran :</span>
+                  <strong id="preview-spec-screen">1920 x 1080</strong>
+                </div>
+                <div style="display:flex; justify-content:space-between;">
+                  <span style="color:var(--text-muted);">Poids Fichier :</span>
+                  <strong id="preview-spec-size">18.4 MB</strong>
+                </div>
+              </div>
+
+              <div style="margin-top:auto; display:flex; flex-direction:column; gap:10px;">
+                <button class="btn btn-secondary" id="preview-edit-btn">Retoucher dans l'éditeur</button>
+                <button class="btn btn-primary" id="preview-apply-btn" style="padding:12px;">Appliquer comme Fond</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- VUE: IMAGE EDITOR -->
+        <section id="view-editor" class="view-panel">
+          <div class="editor-layout">
+            <div class="editor-canvas-wrapper">
+              <canvas id="editor-canvas"></canvas>
+            </div>
+
+            <!-- Outils de retouche non destructive -->
+            <div class="editor-tools-panel">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h3 style="font-size:16px; font-weight:700;">Retouche Non Destructive</h3>
+                <button class="btn btn-ghost" id="editor-reset-btn" style="font-size:12px;">Réinitialiser</button>
+              </div>
+
+              <!-- Préréglages -->
+              <div>
+                <label style="font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:1px; display:block; margin-bottom:8px;">Préréglages</label>
+                <div class="editor-presets-row">
+                  <div class="preset-chip" id="preset-vibrant">Vibrant</div>
+                  <div class="preset-chip" id="preset-nordic">Nordic Frost</div>
+                  <div class="preset-chip" id="preset-cinema-bw">Cinéma Noir</div>
+                  <div class="preset-chip" id="preset-vintage">Vintage Sépia</div>
+                </div>
+              </div>
+
+              <!-- Sliders Couleurs & Lumière -->
+              <div class="slider-group">
+                <div class="slider-header"><span>Luminosité</span><span class="slider-value" id="editor-brightness-val">100%</span></div>
+                <input type="range" id="editor-brightness" min="0.2" max="2.0" step="0.05" value="1.0">
+              </div>
+
+              <div class="slider-group">
+                <div class="slider-header"><span>Contraste</span><span class="slider-value" id="editor-contrast-val">100%</span></div>
+                <input type="range" id="editor-contrast" min="0.5" max="2.0" step="0.05" value="1.0">
+              </div>
+
+              <div class="slider-group">
+                <div class="slider-header"><span>Saturation</span><span class="slider-value" id="editor-saturation-val">100%</span></div>
+                <input type="range" id="editor-saturation" min="0.0" max="2.5" step="0.05" value="1.0">
+              </div>
+
+              <div class="slider-group">
+                <div class="slider-header"><span>Température</span><span class="slider-value" id="editor-temperature-val">0</span></div>
+                <input type="range" id="editor-temperature" min="-1.0" max="1.0" step="0.05" value="0.0">
+              </div>
+
+              <div class="slider-group">
+                <div class="slider-header"><span>Teinte</span><span class="slider-value" id="editor-tint-val">0</span></div>
+                <input type="range" id="editor-tint" min="-1.0" max="1.0" step="0.05" value="0.0">
+              </div>
+
+              <div class="slider-group">
+                <div class="slider-header"><span>Flou (Blur)</span><span class="slider-value" id="editor-blur-val">0px</span></div>
+                <input type="range" id="editor-blur" min="0" max="10" step="0.5" value="0">
+              </div>
+
+              <div class="slider-group">
+                <div class="slider-header"><span>Vignettage</span><span class="slider-value" id="editor-vignette-val">0%</span></div>
+                <input type="range" id="editor-vignette" min="0.0" max="1.0" step="0.05" value="0.0">
+              </div>
+
+              <!-- Toggles N&B / Sépia -->
+              <div style="display:flex; justify-content:space-between; padding-top:8px;">
+                <label class="switch-label">
+                  <input type="checkbox" id="editor-bw-toggle">
+                  <div class="switch"></div>
+                  <span style="font-size:12.5px;">Noir & Blanc</span>
+                </label>
+                <label class="switch-label">
+                  <input type="checkbox" id="editor-sepia-toggle">
+                  <div class="switch"></div>
+                  <span style="font-size:12.5px;">Sépia</span>
+                </label>
+              </div>
+
+              <!-- Géométrie -->
+              <div style="display:flex; gap:8px;">
+                <button class="btn btn-secondary" id="editor-rotate-cw" style="flex:1; font-size:12px;">Pivoter 90°</button>
+                <button class="btn btn-secondary" id="editor-flip-h" style="flex:1; font-size:12px;">Miroir H</button>
+                <button class="btn btn-secondary" id="editor-flip-v" style="flex:1; font-size:12px;">Miroir V</button>
+              </div>
+
+              <div style="margin-top:auto; display:flex; gap:10px; padding-top:12px;">
+                <button class="btn btn-secondary" id="editor-save-btn" style="flex:1;">Enregistrer</button>
+                <button class="btn btn-primary" id="editor-apply-btn" style="flex:1;">Appliquer</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- VUE: PLAYLISTS -->
+        <section id="view-playlists" class="view-panel">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+            <div>
+              <h2 style="font-size:20px; font-weight:700;">Vos Playlists de Rotation</h2>
+              <p style="font-size:13px; color:var(--text-secondary);">Organisez vos fonds d'écran par thèmes avec des intervalles et règles dédiées.</p>
+            </div>
+            <button class="btn btn-primary" id="create-playlist-btn">+ Nouvelle Playlist</button>
+          </div>
+          <div id="playlists-grid-container" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap:20px;"></div>
+        </section>
+
+        <!-- VUE: AUTOMATIONS -->
+        <section id="view-automations" class="view-panel">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+            <div>
+              <h2 style="font-size:20px; font-weight:700;">Règles & Déclencheurs Intelligents</h2>
+              <p style="font-size:13px; color:var(--text-secondary);">Automatisez vos fonds selon l'heure de la journée, le branchement sur batterie ou vos jeux.</p>
+            </div>
+            <button class="btn btn-primary" id="add-automation-btn">+ Nouvelle Règle</button>
+          </div>
+          <div id="automations-list-container"></div>
+        </section>
+
+        <!-- VUE: MONITORS -->
+        <section id="view-monitors" class="view-panel">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+            <div>
+              <h2 style="font-size:20px; font-weight:700;">Disposition Multi-Écrans</h2>
+              <p style="font-size:13px; color:var(--text-secondary);">Écrans connectés sous Wayland / X11 détectés automatiquement.</p>
+            </div>
+            <button class="btn btn-secondary" id="refresh-monitors-btn">Rafraîchir</button>
+          </div>
+
+          <!-- Canevas des écrans -->
+          <div id="monitors-visual-canvas" class="monitors-visual-canvas"></div>
+
+          <!-- Options multi-écrans -->
+          <div class="settings-card">
+            <div class="widget-title">Mode d'affichage multi-écrans</div>
+            <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:14px; margin-top:10px;">
+              <button class="btn btn-secondary monitor-mode-btn active" data-mode="clone" style="padding:16px; flex-direction:column; gap:6px;">
+                <strong style="font-size:14px;">Même fond partout</strong>
+                <span style="font-size:11.5px; color:var(--text-muted);">Applique le même wallpaper sur tous vos moniteurs.</span>
+              </button>
+              <button class="btn btn-secondary monitor-mode-btn" data-mode="individual" style="padding:16px; flex-direction:column; gap:6px;">
+                <strong style="font-size:14px;">Individuel par écran</strong>
+                <span style="font-size:11.5px; color:var(--text-muted);">Attribuez un fond différent à chaque moniteur.</span>
+              </button>
+              <button class="btn btn-secondary monitor-mode-btn" data-mode="span" style="padding:16px; flex-direction:column; gap:6px;">
+                <strong style="font-size:14px;">Panoramique Étendu</strong>
+                <span style="font-size:11.5px; color:var(--text-muted);">Étend une image ultra-large sur tous vos écrans combinés.</span>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- VUE: SETTINGS & DIAGNOSTICS -->
+        <section id="view-settings" class="view-panel">
+          <div class="settings-nav">
+            <div class="settings-tab-btn active" data-tab="general">Général</div>
+            <div class="settings-tab-btn" data-tab="performance">Performance & Profils</div>
+            <div class="settings-tab-btn" data-tab="diagnostics">Diagnostics Fedora</div>
+            <div class="settings-tab-btn" data-tab="storage">Stockage & Cache</div>
+            <div class="settings-tab-btn" data-tab="logs">Journaux (Logs)</div>
+          </div>
+
+          <!-- SECTION: GÉNÉRAL -->
+          <div id="settings-sec-general" class="settings-section-view">
+            <div class="settings-card">
+              <div class="settings-item">
+                <div class="settings-item-info">
+                  <div class="settings-item-title">Lancement au démarrage</div>
+                  <div class="settings-item-desc">Démarre l'application automatiquement à l'ouverture de session (XDG Autostart).</div>
+                </div>
+                <label class="switch-label">
+                  <input type="checkbox" id="settings-autostart-toggle">
+                  <div class="switch"></div>
+                </label>
+              </div>
+
+              <div class="settings-item">
+                <div class="settings-item-info">
+                  <div class="settings-item-title">Minimiser dans la barre des tâches</div>
+                  <div class="settings-item-desc">Conserve l'application active dans la zone de notification lors de la fermeture de la fenêtre.</div>
+                </div>
+                <label class="switch-label">
+                  <input type="checkbox" id="settings-tray-toggle" checked>
+                  <div class="switch"></div>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- SECTION: PERFORMANCE -->
+          <div id="settings-sec-performance" class="settings-section-view" style="display:none;">
+            <div class="settings-card">
+              <div class="widget-title">Sélection du Profil Actif</div>
+              <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:14px; margin-top:10px;">
+                <div class="profile-card-option" data-profile="Quality" style="padding:16px; background:var(--bg-surface-raised); border:1px solid var(--border-subtle); border-radius:var(--radius-md); cursor:pointer;">
+                  <strong style="font-size:14px;">Quality</strong>
+                  <div style="font-size:11.5px; color:var(--text-muted); margin-top:4px;">60 FPS, rendu natif 4K.</div>
+                </div>
+                <div class="profile-card-option active" data-profile="Balanced" style="padding:16px; background:var(--bg-surface-raised); border:1px solid var(--border-subtle); border-radius:var(--radius-md); cursor:pointer;">
+                  <strong style="font-size:14px; color:var(--accent-primary);">Balanced</strong>
+                  <div style="font-size:11.5px; color:var(--text-muted); margin-top:4px;">30 FPS, pause sur batterie/jeu.</div>
+                </div>
+                <div class="profile-card-option" data-profile="Performance" style="padding:16px; background:var(--bg-surface-raised); border:1px solid var(--border-subtle); border-radius:var(--radius-md); cursor:pointer;">
+                  <strong style="font-size:14px;">Performance</strong>
+                  <div style="font-size:11.5px; color:var(--text-muted); margin-top:4px;">24 FPS, 1080p, ultra léger.</div>
+                </div>
+                <div class="profile-card-option" data-profile="Battery Saver" style="padding:16px; background:var(--bg-surface-raised); border:1px solid var(--border-subtle); border-radius:var(--radius-md); cursor:pointer;">
+                  <strong style="font-size:14px;">Battery Saver</strong>
+                  <div style="font-size:11.5px; color:var(--text-muted); margin-top:4px;">Statique forcé sur batterie.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SECTION: DIAGNOSTICS FEDORA -->
+          <div id="settings-sec-diagnostics" class="settings-section-view" style="display:none;">
+            <div class="settings-card">
+              <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:16px; margin-bottom:16px;">
+                <div style="background:var(--bg-surface-raised); padding:14px; border-radius:var(--radius-md);">
+                  <span style="font-size:11.5px; color:var(--text-muted);">Distribution :</span>
+                  <div style="font-weight:700; margin-top:4px;" id="diag-distro-name">Fedora Linux</div>
+                </div>
+                <div style="background:var(--bg-surface-raised); padding:14px; border-radius:var(--radius-md);">
+                  <span style="font-size:11.5px; color:var(--text-muted);">Session d'Affichage :</span>
+                  <div style="font-weight:700; margin-top:4px;" id="diag-session-type">WAYLAND</div>
+                </div>
+                <div style="background:var(--bg-surface-raised); padding:14px; border-radius:var(--radius-md);">
+                  <span style="font-size:11.5px; color:var(--text-muted);">Environnement :</span>
+                  <div style="font-weight:700; margin-top:4px;" id="diag-desktop-env">GNOME</div>
+                </div>
+              </div>
+
+              <div class="widget-title" style="margin-bottom:12px;">État des outils de fond d'écran et commandes Fedora</div>
+              <table style="width:100%; border-collapse:collapse; text-align:left;">
+                <thead>
+                  <tr style="border-bottom:1px solid var(--border-medium); color:var(--text-muted); font-size:12px;">
+                    <th style="padding:8px 14px;">Outil</th>
+                    <th style="padding:8px 14px;">Rôle</th>
+                    <th style="padding:8px 14px;">Statut</th>
+                    <th style="padding:8px 14px;">Commande d'installation DNF</th>
+                  </tr>
+                </thead>
+                <tbody id="diagnostics-table-body"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- SECTION: STOCKAGE -->
+          <div id="settings-sec-storage" class="settings-section-view" style="display:none;">
+            <div class="settings-card">
+              <div class="widget-title">Espace et Cache des Miniatures</div>
+              <p style="font-size:12.5px; color:var(--text-secondary);">Les miniatures et images retouchées sont mises en cache pour un affichage instantané.</p>
+              <div style="height:8px; background:var(--bg-surface-raised); border-radius:var(--radius-full); overflow:hidden; margin:10px 0;">
+                <div id="cache-progress-fill" style="width:10%; height:100%; background:var(--accent-primary); transition:width 0.3s ease;"></div>
+              </div>
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span id="cache-stats-text" style="font-size:12px; color:var(--text-muted); font-family:var(--font-mono);">Calcul...</span>
+                <button class="btn btn-secondary btn-danger" id="clear-cache-btn">Vider le cache</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- SECTION: LOGS -->
+          <div id="settings-sec-logs" class="settings-section-view" style="display:none;">
+            <div class="settings-card">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div class="widget-title">Journal d'Événements en Direct</div>
+                <button class="btn btn-secondary" id="refresh-logs-btn" style="font-size:12px;">Rafraîchir</button>
+              </div>
+              <div id="system-logs-console" style="background:#080A0F; border:1px solid var(--border-subtle); border-radius:var(--radius-md); padding:14px; height:320px; overflow-y:auto;"></div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <!-- Zone de Dropzone globale -->
+    <div id="global-dropzone" class="dropzone-overlay">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--accent-primary)" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+      <div style="font-size:18px; font-weight:700;">Déposez vos fonds d'écran ici</div>
+      <div style="font-size:13px; color:var(--text-secondary);">Images (PNG, JPG, WEBP), GIFs animés et vidéos (MP4, WEBM)</div>
+    </div>
+
+    <!-- Menu Contextuel Clic Droit -->
+    <div id="context-menu"></div>
+
+    <!-- Modale Globale -->
+    <div id="global-modal-overlay" class="modal-overlay">
+      <div class="modal-card" id="global-modal-card">
+        <div class="modal-header">
+          <h3 id="global-modal-title" style="font-size:16px; font-weight:700;">Titre</h3>
+          <button class="btn btn-icon btn-ghost" onclick="window.modal.close();">✕</button>
+        </div>
+        <div class="modal-body" id="global-modal-body"></div>
+        <div class="modal-footer" id="global-modal-footer"></div>
+      </div>
+    </div>
+
+    <!-- Onboarding Wizard Overlay -->
+    <div id="onboarding-modal-overlay" class="onboarding-overlay" style="display:none;">
+      <div class="onboarding-card">
+        <div class="onboarding-dots" id="onboarding-step-dots"></div>
+        <h2 id="onboarding-step-title" style="font-size:24px; font-weight:700;">Bienvenue</h2>
+        <div id="onboarding-step-content" style="min-height:120px; display:flex; flex-direction:column; justify-content:center;"></div>
+        <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid var(--border-subtle); padding-top:20px;">
+          <button class="btn btn-ghost" id="onboarding-skip-btn">Passer l'onboarding</button>
+          <button class="btn btn-primary" id="onboarding-next-btn" style="padding:10px 24px;">Suivant →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Conteneur de Toasts -->
+    <div id="toast-container"></div>
+  </div>
+
+  <!-- Scripts JavaScript SPA -->
+  <script src="js/api.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/components/toast.js"></script>
+  <script src="js/components/modal.js"></script>
+  <script src="js/components/context_menu.js"></script>
+  <script src="js/router.js"></script>
+  <script src="js/pages/dashboard.js"></script>
+  <script src="js/pages/library.js"></script>
+  <script src="js/pages/preview.js"></script>
+  <script src="js/pages/editor.js"></script>
+  <script src="js/pages/playlists.js"></script>
+  <script src="js/pages/automations.js"></script>
+  <script src="js/pages/monitors.js"></script>
+  <script src="js/pages/settings.js"></script>
+  <script src="js/pages/onboarding.js"></script>
+
+  <script>
+    // Initialisation générale au chargement du DOM
+    document.addEventListener('DOMContentLoaded', async () => {
+      window.dashboardPage.init();
+      window.libraryPage.init();
+      window.previewPage.init();
+      window.editorPage.init();
+      window.playlistsPage.init();
+      window.automationsPage.init();
+      window.monitorsPage.init();
+      window.settingsPage.init();
+      window.onboardingWizard.init();
+
+      // Démarrage sur la vue Dashboard
+      window.router.navigate('dashboard');
+      await window.store.refreshAll();
+    });
+  </script>
+</body>
+</html>

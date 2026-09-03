@@ -1,0 +1,11 @@
+# Core GUI
+pywebview>=4.4.1
+
+# Image Processing & Media
+Pillow>=10.0.0
+
+# System & Tray
+pystray>=0.19.5
+psutil>=5.9.5
+
+# Note: Sur Linux Fedora, PyWebView s'appuie sur webkit2gtk4.1 (paquet RPM python3-pywebview ou libwebkit2gtk)

@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=WallpaperMaison
+GenericName=Gestionnaire de Fonds d'Écran
+Comment=Alternative moderne à Wallpaper Engine pour Linux Fedora
+Exec=wallpapermaison %F
+Icon=wallpapermaison
+Terminal=false
+Categories=Utility;Settings;DesktopSettings;
+Keywords=wallpaper;background;engine;wayland;video;gnome;kde;
+StartupNotify=true
+X-GNOME-UsesNotifications=true

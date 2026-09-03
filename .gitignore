@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Environnements virtuels
+.venv/
+venv/
+ENV/
+env/
+/tmp/wm_build_venv/
+
+# Builds & Distribution
+build/
+dist/
+*.egg-info/
+*.spec.bak
+
+# Données locales & logs de développement
+.cache/
+*.log
+*.db-journal
+*.db-wal
+*.db-shm
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
