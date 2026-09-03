@@ -12,6 +12,7 @@ else
     PYTHON_EXEC="python3"
 fi
 
+export PYSTRAY_BACKEND="${PYSTRAY_BACKEND:-xorg}"
 export PYTHONPATH="${SCRIPT_DIR}:${PYTHONPATH}"
 
 # Lancement de l'application

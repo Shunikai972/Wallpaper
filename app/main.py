@@ -52,7 +52,7 @@ class Application:
         if config_manager.get("auto_change.enabled", False):
             scheduler.start()
 
-        # Démarrage de l'icône dans la zone de notification
+        # Démarrage de l'icône dans la zone de notification (si supportée)
         self.tray = SystemTrayManager(
             on_open=self._on_tray_open,
             on_next=scheduler.next_wallpaper,
@@ -63,7 +63,11 @@ class Application:
             on_set_profile=lambda p: config_manager.set("performance_profile", p),
             on_quit=self.shutdown
         )
-        self.tray.start()
+        if self.tray.is_available:
+            self.tray.start()
+
+        # Restauration automatique du fond d'écran précédent sur le bureau
+        wallpaper_manager.restore_last_wallpaper()
 
     def _on_tray_open(self) -> None:
         if self.window:
@@ -88,6 +92,16 @@ class Application:
     def run(self) -> None:
         """Lance l'interface utilisateur PyWebView."""
         self.setup_services()
+
+        # Gestion des signaux d'arrêt propres (SIGINT, SIGTERM)
+        signal.signal(signal.SIGINT, lambda s, f: self.shutdown())
+        signal.signal(signal.SIGTERM, lambda s, f: self.shutdown())
+
+        if self.daemon_mode:
+            logger.info("Mode démon actif (sans interface graphique), en attente d'événements...")
+            self._shutdown_event.wait()
+            self.shutdown()
+            return
 
         html_file = ROOT_DIR / "ui" / "index.html"
         if not html_file.exists():
@@ -114,19 +128,10 @@ class Application:
         self.bridge.set_window(self.window)
         self.window.events.closing += self.on_closing
 
-        # Gestion des signaux d'arrêt propres (SIGINT, SIGTERM)
-        signal.signal(signal.SIGINT, lambda s, f: self.shutdown())
-        signal.signal(signal.SIGTERM, lambda s, f: self.shutdown())
-
-        if self.daemon_mode:
-            logger.info("Mode démon actif, en attente...")
-            self._shutdown_event.wait()
-            self.shutdown()
-        else:
-            # Lancement de la boucle PyWebView
-            # Sur Linux, webkit2gtk est utilisé par défaut
-            webview.start(debug=False)
-            self.shutdown()
+        # Lancement de la boucle PyWebView
+        # Sur Linux Fedora, webkit2gtk est utilisé par défaut
+        webview.start(debug=False)
+        self.shutdown()
 
     def shutdown(self) -> None:
         """Arrête proprement l'ensemble des threads et processus enfants."""
@@ -156,13 +161,19 @@ def main() -> None:
     parser.add_argument("--version", action="version", version=f"{__app_name__} {__version__}")
     parser.add_argument("--minimized", action="store_true", help="Démarrer l'application minimisée dans la barre des tâches")
     parser.add_argument("--daemon", action="store_true", help="Lancer en mode démon sans interface graphique")
+    parser.add_argument("--restore", action="store_true", help="Applique le dernier fond d'écran actif et quitte")
     parser.add_argument("--scan", type=str, help="Scanne un dossier spécifique et quitte")
     args = parser.parse_args()
+
+    if args.restore:
+        logger.info("Restauration immédiate du fond d'écran actif...")
+        wallpaper_manager.restore_last_wallpaper()
+        return
 
     if args.scan:
         logger.info("Scan unique demandé pour: %s", args.scan)
         from app.media.scanner import media_scanner
-        media_scanner.scan_directories_async([args.scan], recursive=True)
+        media_scanner.scan_directories_sync([args.scan], recursive=True)
         return
 
     app = Application(start_minimized=args.minimized, daemon_mode=args.daemon)

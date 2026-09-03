@@ -134,16 +134,28 @@ class OnboardingWizard {
       titleEl.textContent = 'Profil de Performance';
       contentEl.innerHTML = `
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
-          <div class="profile-card-option active" style="padding:14px; background:var(--bg-surface-raised); border:1px solid var(--border-subtle); border-radius:var(--radius-md); text-align:left;">
-            <div style="font-weight:600; color:var(--accent-primary);">Balanced (Recommandé)</div>
+          <div class="profile-card-option active" data-profile="Balanced" style="text-align:left;">
+            <strong style="font-size:14px;">Balanced (Recommandé)</strong>
             <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">30 FPS, pause automatique en jeu ou sur batterie.</div>
           </div>
-          <div class="profile-card-option" style="padding:14px; background:var(--bg-surface-raised); border:1px solid var(--border-subtle); border-radius:var(--radius-md); text-align:left;">
-            <div style="font-weight:600;">Quality</div>
+          <div class="profile-card-option" data-profile="Quality" style="text-align:left;">
+            <strong style="font-size:14px;">Quality</strong>
             <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">60 FPS natif, rendu haute fidélité permanent.</div>
           </div>
         </div>
       `;
+      contentEl.querySelectorAll('.profile-card-option').forEach((card) => {
+        card.addEventListener('click', async () => {
+          contentEl.querySelectorAll('.profile-card-option').forEach((c) => c.classList.remove('active'));
+          card.classList.add('active');
+          const prof = card.getAttribute('data-profile');
+          const res = await window.api.call('set_performance_profile', prof);
+          if (res && res.success) {
+            window.store.setProfile(prof, res.settings);
+            window.toast.success(`Profil sélectionné : ${prof}`);
+          }
+        });
+      });
     } else if (this.currentStep === 7) {
       titleEl.textContent = 'Vous êtes prêt !';
       contentEl.innerHTML = `

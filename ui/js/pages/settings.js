@@ -25,8 +25,13 @@ class SettingsPage {
         document.querySelectorAll('.profile-card-option').forEach((c) => c.classList.remove('active'));
         card.classList.add('active');
         const profile = card.getAttribute('data-profile');
-        await window.api.call('set_performance_profile', profile);
-        window.toast.success(`Profil actif : ${profile}`);
+        const res = await window.api.call('set_performance_profile', profile);
+        if (res && res.success) {
+          window.store.setProfile(profile, res.settings);
+          window.toast.success(`Profil activé : ${profile} (${res.settings ? res.settings.max_fps : 60} FPS)`);
+        } else {
+          window.toast.error("Erreur lors de l'application du profil.");
+        }
       });
     });
 
@@ -83,6 +88,7 @@ class SettingsPage {
 
       // Profil actif
       const activeProf = cfg.performance_profile || 'Balanced';
+      window.store.setProfile(activeProf);
       document.querySelectorAll('.profile-card-option').forEach((c) => {
         if (c.getAttribute('data-profile') === activeProf) {
           c.classList.add('active');

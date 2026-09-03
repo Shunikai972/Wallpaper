@@ -44,6 +44,8 @@ class ThumbnailGenerator:
                 success = self._generate_video_thumbnail(file_path, thumb_path)
             else:
                 success = self._generate_image_thumbnail(file_path, thumb_path)
+                if not success and shutil.which("ffmpeg"):
+                    success = self._generate_video_thumbnail(file_path, thumb_path, is_video=False)
 
             if success and thumb_path.exists():
                 return str(thumb_path)
@@ -73,23 +75,18 @@ class ThumbnailGenerator:
             logger.debug("Erreur PIL thumbnail: %s", e)
             return False
 
-    def _generate_video_thumbnail(self, src: Path, dest: Path) -> bool:
-        if shutil.which("ffmpeg"):
-            try:
-                # Extrait une image à 1 seconde ou 10% de la durée
-                cmd = [
-                    "ffmpeg", "-ss", "00:00:01", "-i", str(src),
-                    "-vframes", "1",
-                    "-vf", f"scale={self.target_size[0]}:{self.target_size[1]}:force_original_aspect_ratio=increase,crop={self.target_size[0]}:{self.target_size[1]}",
-                    "-q:v", "3",
-                    "-y", str(dest)
-                ]
-                subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5, check=True)
-                return True
-            except Exception as e:
-                logger.debug("Erreur ffmpeg vidéo thumbnail: %s", e)
-
-        # Si ffmpeg échoue, tentative avec le début du fichier (ou placeholder)
-        return False
+    def _generate_video_thumbnail(self, src: Path, dest: Path, is_video: bool = True) -> bool:
+        from app.media.media_tools import run_ffmpeg
+        args = []
+        if is_video:
+            args += ["-ss", "00:00:01"]
+        args += [
+            "-i", str(src),
+            "-vframes", "1",
+            "-vf", f"scale={self.target_size[0]}:{self.target_size[1]}:force_original_aspect_ratio=increase,crop={self.target_size[0]}:{self.target_size[1]}",
+            "-q:v", "3",
+            "-y", str(dest)
+        ]
+        return run_ffmpeg(args, timeout=8)
 
 thumbnail_generator = ThumbnailGenerator()

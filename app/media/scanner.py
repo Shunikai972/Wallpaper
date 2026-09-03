@@ -97,6 +97,13 @@ class MediaScanner:
         self._current_thread = threading.Thread(target=run, daemon=True, name="MediaScannerThread")
         self._current_thread.start()
 
+    def scan_directories_sync(self, directories: List[str], recursive: bool = True) -> int:
+        """Exécute le scan de manière synchrone en attendant la complétion (pour les commandes CLI)."""
+        self.scan_directories_async(directories, recursive=recursive)
+        if self._current_thread:
+            self._current_thread.join()
+        return db.get_stats().get("total", 0)
+
     def import_single_file(self, file_path_str: str) -> Optional[Dict[str, Any]]:
         """Importe immédiatement un fichier individuel (ex. drag-and-drop dans l'interface)."""
         f = Path(file_path_str).expanduser()

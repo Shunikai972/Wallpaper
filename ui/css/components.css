@@ -495,3 +495,28 @@ input[type="range"]::-webkit-slider-thumb:hover {
   opacity: 1;
   pointer-events: auto;
 }
+
+/* --- Cartes des profils de performance --- */
+.profile-card-option {
+  padding: 16px;
+  background: var(--bg-surface-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+  position: relative;
+}
+.profile-card-option:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-surface-hover);
+  transform: translateY(-2px);
+}
+.profile-card-option.active {
+  border-color: var(--accent-primary) !important;
+  background: rgba(163, 190, 140, 0.08) !important;
+  box-shadow: 0 0 16px rgba(163, 190, 140, 0.22);
+}
+.profile-card-option.active strong {
+  color: var(--accent-primary) !important;
+}

@@ -277,28 +277,84 @@ class LibraryPage {
 
     window.addEventListener('dragover', (e) => {
       e.preventDefault();
+      e.stopPropagation();
       overlay.classList.add('active');
     });
 
-    overlay.addEventListener('dragleave', () => {
+    overlay.addEventListener('dragleave', (e) => {
+      e.preventDefault();
       overlay.classList.remove('active');
     });
 
     overlay.addEventListener('drop', async (e) => {
       e.preventDefault();
+      e.stopPropagation();
       overlay.classList.remove('active');
+
+      const paths = new Set();
+
+      // 1. Extraction via text/uri-list (standard Linux / WebKitGTK / Nautilus)
+      const uriList = e.dataTransfer ? e.dataTransfer.getData('text/uri-list') : '';
+      if (uriList) {
+        uriList.split('\n').forEach((line) => {
+          line = line.trim();
+          if (line && !line.startsWith('#')) {
+            if (line.startsWith('file://')) {
+              try {
+                const clean = decodeURIComponent(line.replace(/^file:\/\//, ''));
+                if (clean) paths.add(clean);
+              } catch (err) {
+                paths.add(line.replace(/^file:\/\//, ''));
+              }
+            } else if (line.startsWith('/')) {
+              paths.add(line);
+            }
+          }
+        });
+      }
+
+      // 2. Extraction via text/plain
+      const plainText = e.dataTransfer ? e.dataTransfer.getData('text/plain') : '';
+      if (plainText) {
+        plainText.split('\n').forEach((line) => {
+          line = line.trim();
+          if (line.startsWith('file://')) {
+            try {
+              paths.add(decodeURIComponent(line.replace(/^file:\/\//, '')));
+            } catch (err) {
+              paths.add(line.replace(/^file:\/\//, ''));
+            }
+          } else if (line.startsWith('/') && !line.includes('\n')) {
+            paths.add(line);
+          }
+        });
+      }
+
+      // 3. Extraction via File API (si Electron ou si file.path est fourni)
       if (e.dataTransfer && e.dataTransfer.files) {
-        let count = 0;
         for (const file of e.dataTransfer.files) {
           if (file.path) {
-            const res = await window.api.call('import_single_file', file.path);
-            if (res && res.success) count++;
+            paths.add(file.path);
           }
         }
-        if (count > 0) {
-          window.toast.success(`${count} média(s) importé(s) via glisser-déposer.`);
-          window.store.refreshAll();
-        }
+      }
+
+      if (paths.size === 0) {
+        window.toast.warning("Aucun chemin de fichier détecté dans le glisser-déposer.");
+        return;
+      }
+
+      let count = 0;
+      for (const filePath of paths) {
+        const res = await window.api.call('import_single_file', filePath);
+        if (res && res.success) count++;
+      }
+
+      if (count > 0) {
+        window.toast.success(`${count} média(s) importé(s) via glisser-déposer.`);
+        window.store.refreshAll();
+      } else {
+        window.toast.error("Impossible d'importer le fichier (format non supporté).");
       }
     });
   }

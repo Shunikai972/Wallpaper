@@ -32,9 +32,9 @@ class SystemDetector:
             "recommended_engine": recommended_engine,
             "capabilities": {
                 "can_static": True,
-                "can_video": bool(tools.get("mpvpaper") or tools.get("xwinwrap") or (desktop_env == "gnome") or (desktop_env == "kde")),
-                "can_gif": bool(tools.get("swww") or tools.get("mpvpaper") or tools.get("xwinwrap")),
-                "has_hardware_accel": bool(tools.get("mpv") or tools.get("ffmpeg"))
+                "can_video": bool(tools.get("mpvpaper", {}).get("installed") or tools.get("xwinwrap", {}).get("installed") or (desktop_env in ("gnome", "kde"))),
+                "can_gif": bool(tools.get("swww", {}).get("installed") or tools.get("mpvpaper", {}).get("installed") or tools.get("xwinwrap", {}).get("installed") or (desktop_env in ("gnome", "kde"))),
+                "has_hardware_accel": bool(tools.get("mpv", {}).get("installed") or tools.get("ffmpeg", {}).get("installed"))
             }
         }
         self._cache = res

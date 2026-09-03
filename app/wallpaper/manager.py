@@ -17,6 +17,7 @@ from app.wallpaper.engines.mpvpaper_engine import MpvpaperWallpaperEngine
 from app.wallpaper.engines.swww_engine import SwwwWallpaperEngine
 from app.wallpaper.engines.xwinwrap_engine import XwinwrapWallpaperEngine
 from app.wallpaper.engines.feh_engine import FehWallpaperEngine
+from app.wallpaper.engines.gtk_video_engine import GtkVideoWallpaperEngine
 from app.wallpaper.engines.fallback_engine import FallbackWallpaperEngine
 
 logger = logging.getLogger("wallpapermaison.wallpaper_manager")
@@ -29,6 +30,7 @@ class WallpaperManager:
             "gnome": GnomeWallpaperEngine(),
             "kde": KdeWallpaperEngine(),
             "mpvpaper": MpvpaperWallpaperEngine(),
+            "gtk_video": GtkVideoWallpaperEngine(),
             "swww": SwwwWallpaperEngine(),
             "xwinwrap": XwinwrapWallpaperEngine(),
             "feh": FehWallpaperEngine(),
@@ -61,6 +63,9 @@ class WallpaperManager:
                 return self.engines["mpvpaper"]
             elif session == "x11" and tools.get("xwinwrap", {}).get("installed"):
                 return self.engines["xwinwrap"]
+            # Moteur vidéo autonome accéléré (fonctionne sous GNOME Wayland/Xwayland sans root)
+            if self.engines["gtk_video"].is_available():
+                return self.engines["gtk_video"]
             # Si pas de moteur vidéo externe, tenter mpvpaper ou fallback
             if self.engines["mpvpaper"].is_available():
                 return self.engines["mpvpaper"]
@@ -123,6 +128,12 @@ class WallpaperManager:
         merged_opts = {**profile, **(options or {})}
 
         engine = self.select_engine_for(media_type)
+
+        # Arrêt du moteur précédent s'il était actif ou en cas de changement
+        if self._active_engine_name and self._active_engine_name in self.engines:
+            if self._active_engine_name != engine.name or engine.name == "gtk_video":
+                self.engines[self._active_engine_name].stop(monitor)
+
         self._active_engine_name = engine.name
         logger.info("Application du wallpaper '%s' (id: %s) via le moteur '%s' sur l'écran '%s'",
                     wp["file_name"], wallpaper_id, engine.name, monitor)
@@ -167,6 +178,24 @@ class WallpaperManager:
         # Récupération depuis le dernier historique
         hist = db.get_history(limit=1)
         return hist[0] if hist else None
+
+    def restore_last_wallpaper(self) -> bool:
+        """Restaure et applique automatiquement le dernier fond d'écran actif depuis la base de données."""
+        try:
+            hist = db.get_history(limit=1)
+            if hist and len(hist) > 0 and "wallpaper_id" in hist[0]:
+                wp_id = hist[0]["wallpaper_id"]
+                logger.info("Restauration automatique du fond d'écran précédent (ID: %s)", wp_id)
+                return self.apply_wallpaper(wp_id)
+
+            wps = db.get_wallpapers(limit=1)
+            if wps and len(wps) > 0:
+                wp_id = wps[0]["id"]
+                logger.info("Application du premier fond d'écran disponible (ID: %s)", wp_id)
+                return self.apply_wallpaper(wp_id)
+        except Exception as e:
+            logger.error("Erreur lors de la restauration du fond d'écran: %s", e)
+        return False
 
     def get_engines_status(self) -> List[Dict[str, Any]]:
         """Retourne la liste des moteurs et leur statut pour les paramètres."""

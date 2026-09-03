@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=WallpaperMaison
+Comment=Restauration et gestion automatique des fonds d'écran
+Exec=/var/home/E256190S/reseau/Perso/Bureau/Wallpaper/scripts/run.sh --daemon
+Hidden=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
+X-GNOME-Autostart-Delay=2

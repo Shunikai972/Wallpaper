@@ -316,7 +316,11 @@ class AppBridge:
     def set_performance_profile(self, profile_name: str) -> Dict[str, Any]:
         if profile_name in PERFORMANCE_PROFILES or profile_name == "Custom":
             config_manager.set("performance_profile", profile_name)
-            return {"success": True}
+            cur = wallpaper_manager.get_current_wallpaper()
+            if cur and "id" in cur:
+                wallpaper_manager.apply_wallpaper(cur["id"])
+            bus.emit("performance_profile_changed", profile=profile_name)
+            return {"success": True, "profile": profile_name, "settings": config_manager.get_active_profile_settings()}
         return {"success": False, "error": "Profil inconnu"}
 
     def get_system_info(self) -> Dict[str, Any]:

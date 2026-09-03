@@ -4,15 +4,33 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 logger = logging.getLogger("wallpapermaison.config")
 
-# Chemins standards XDG
+# Chemins standards XDG et détection de persistance réseau (IUT NFS reseau/Perso)
 HOME = Path.home()
-CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", HOME / ".config")) / "wallpapermaison"
-CACHE_DIR = Path(os.environ.get("XDG_CACHE_HOME", HOME / ".cache")) / "wallpapermaison"
-DATA_DIR = Path(os.environ.get("XDG_DATA_HOME", HOME / ".local" / "share")) / "wallpapermaison"
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+
+PERSISTENT_ROOT: Optional[Path] = None
+network_perso = HOME / "reseau" / "Perso"
+marker_file = REPO_ROOT / ".persistent_mode"
+
+if os.environ.get("WALLPAPERMAISON_PERSISTENT") == "1" or marker_file.exists():
+    if network_perso.exists():
+        PERSISTENT_ROOT = network_perso
+elif network_perso.exists() and (network_perso / ".config" / "wallpapermaison").exists():
+    PERSISTENT_ROOT = network_perso
+
+if PERSISTENT_ROOT and PERSISTENT_ROOT.exists():
+    CONFIG_DIR = PERSISTENT_ROOT / ".config" / "wallpapermaison"
+    DATA_DIR = PERSISTENT_ROOT / ".local" / "share" / "wallpapermaison"
+    CACHE_DIR = PERSISTENT_ROOT / ".cache" / "wallpapermaison"
+    logger.info("Mode de stockage persistant réseau actif : %s", PERSISTENT_ROOT)
+else:
+    CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", HOME / ".config")) / "wallpapermaison"
+    DATA_DIR = Path(os.environ.get("XDG_DATA_HOME", HOME / ".local" / "share")) / "wallpapermaison"
+    CACHE_DIR = Path(os.environ.get("XDG_CACHE_HOME", HOME / ".cache")) / "wallpapermaison"
 
 THUMBNAIL_DIR = CACHE_DIR / "thumbnails"
 PROCESSED_DIR = CACHE_DIR / "processed"
@@ -63,6 +81,24 @@ PERFORMANCE_PROFILES: Dict[str, Dict[str, Any]] = {
     }
 }
 
+def _get_default_library_folders() -> list:
+    folders = []
+    if PERSISTENT_ROOT and PERSISTENT_ROOT.exists():
+        p_wallpapers = PERSISTENT_ROOT / "Images" / "Wallpapers"
+        p_test = PERSISTENT_ROOT / "Téléchargements" / "test"
+        folders.append(str(p_wallpapers))
+        if p_test.exists():
+            folders.append(str(p_test))
+    folders.append(str(HOME / "Pictures" / "Wallpapers"))
+    folders.append(str(HOME / "Pictures"))
+    seen = set()
+    result = []
+    for f in folders:
+        if f not in seen:
+            seen.add(f)
+            result.append(f)
+    return result
+
 DEFAULT_CONFIG: Dict[str, Any] = {
     "version": 1,
     "onboarding_completed": False,
@@ -73,10 +109,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "minimize_to_tray": True,
     "start_minimized": False,
     "performance_profile": "Balanced",
-    "library_folders": [
-        str(HOME / "Pictures" / "Wallpapers"),
-        str(HOME / "Pictures")
-    ],
+    "library_folders": _get_default_library_folders(),
     "cache_max_size_mb": 2048,  # 2 GB
     "preferred_engine": "auto", # auto, gnome, kde, mpvpaper, swww, feh, xwinwrap
     "auto_change": {

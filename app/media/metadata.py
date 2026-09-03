@@ -12,7 +12,7 @@ from PIL import Image
 
 logger = logging.getLogger("wallpapermaison.metadata")
 
-IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff", ".avif"}
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff", ".avif", ".jxl", ".svg"}
 ANIMATED_EXTENSIONS = {".gif"}
 VIDEO_EXTENSIONS = {".mp4", ".webm", ".mkv", ".mov", ".avi", ".flv", ".m4v"}
 
@@ -81,29 +81,27 @@ class MediaMetadataExtractor:
                     if duration_per_frame > 0:
                         info["fps"] = round(1000.0 / duration_per_frame, 1)
         except Exception as e:
-            logger.warning("Impossible d'extraire les métadonnées image pour %s: %s", file_path, e)
+            if shutil.which("ffprobe"):
+                cls._extract_video_metadata(file_path, info)
+                if info["width"] > 0 and info["height"] > 0:
+                    return
+            info["width"] = 1920
+            info["height"] = 1080
+            logger.debug("Métadonnées estimées pour %s: %s", file_path, e)
 
     @classmethod
     def _extract_video_metadata(cls, file_path: Path, info: Dict[str, Any]) -> None:
-        if shutil.which("ffprobe"):
+        from app.media.media_tools import run_ffprobe_json
+        data = run_ffprobe_json(file_path, timeout=6)
+        if data:
             try:
-                cmd = [
-                    "ffprobe", "-v", "quiet", "-print_format", "json",
-                    "-show_format", "-show_streams", str(file_path)
-                ]
-                output = subprocess.check_output(cmd, stderr=subprocess.DEVNULL, text=True, timeout=5)
-                data = json.loads(output)
-
-                # Format général
                 fmt = data.get("format", {})
                 info["duration"] = round(float(fmt.get("duration", 0.0)), 2)
 
-                # Flux vidéo
                 for s in data.get("streams", []):
                     if s.get("codec_type") == "video":
                         info["width"] = int(s.get("width", 0))
                         info["height"] = int(s.get("height", 0))
-                        # Extraction FPS (ex "30/1" ou "60000/1001")
                         r_frame = s.get("r_frame_rate", "0/0")
                         if "/" in r_frame:
                             num, den = r_frame.split("/")
@@ -112,9 +110,9 @@ class MediaMetadataExtractor:
                         break
                 return
             except Exception as e:
-                logger.debug("ffprobe a échoué pour %s: %s", file_path, e)
+                logger.debug("Parsing ffprobe data a échoué pour %s: %s", file_path, e)
 
-        # Fallback si ffprobe absent
+        # Fallback par défaut
         info["width"] = 1920
         info["height"] = 1080
         info["duration"] = 0.0

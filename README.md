@@ -45,26 +45,33 @@
 
 ---
 
-## 🚀 Installation sous Fedora
+## 🚀 Installation
 
-Un script d'installation automatisé est fourni. Il vérifie vos outils système, installe les dépendances DNF nécessaires, configure l'environnement virtuel Python, génère le raccourci `.desktop` et installe l'icône de l'application.
+### ⚡ Installation en une seule ligne (Recommandé)
+Vous pouvez installer ou restaurer **WallpaperMaison** sur n'importe quelle machine (y compris un nouveau poste de travail à l'IUT) avec une seule commande à copier-coller :
 
-### 1. Cloner ou télécharger le répertoire
 ```bash
-cd wallpapermaison
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/Shunikai972/Wallpaper/main/scripts/install.sh)"
 ```
 
-### 2. Exécuter le script d'installation
-```bash
-chmod +x scripts/install.sh scripts/run.sh
-./scripts/install.sh
-```
+Cette commande clone automatiquement le dépôt (ou le met à jour), configure l'environnement Python sans nécessiter les droits `root`/`sudo`, crée le lanceur GNOME et indexe vos fonds d'écran.
 
-Le script vous demandera si vous souhaitez installer les paquets Fedora recommandés :
-- `python3`, `python3-pip`, `python3-devel`
-- `webkit2gtk4.1` (moteur de rendu pour PyWebView)
-- `ffmpeg` & `ffprobe` (génération rapide des miniatures et analyse vidéo)
-- `mpv` & `mpvpaper` (moteur vidéo fluide sous Wayland)
+---
+
+### 💾 Mode Persistant Réseau (Spécial IUT / NFS)
+Si vous travaillez sur une machine où la session locale est réinitialisée à chaque redémarrage (ex: postes IUT Nantes avec stockage réseau `~/reseau/Perso`) :
+* L'installateur détecte automatiquement le partage réseau et vous propose l'**installation persistante**.
+* Vos fonds d'écran, base de données SQLite, miniatures en cache, playlists et configurations sont conservés de manière permanente dans `~/reseau/Perso/`.
+* Vos données sont instantanément retrouvées sur **n'importe quel ordinateur** de l'IUT sans réinstallation !
+
+Vous pouvez également forcer le mode en ligne de commande :
+```bash
+# Installation persistante réseau automatique
+./scripts/install.sh --persistent -y
+
+# Ou installation locale classique
+./scripts/install.sh --local -y
+```
 
 ---
 

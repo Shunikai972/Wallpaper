@@ -97,11 +97,34 @@ class StateStore {
     }
   }
 
+  setProfile(profileName, settings = null) {
+    this.set('activeProfile', profileName);
+    const badgeName = document.getElementById('sidebar-active-profile');
+    if (badgeName) badgeName.textContent = profileName;
+
+    const fpsMap = { 'Quality': '60 FPS', 'Balanced': '30 FPS', 'Performance': '24 FPS', 'Battery Saver': 'Statique' };
+    const fpsBadge = document.getElementById('sidebar-active-fps');
+    if (fpsBadge) {
+      fpsBadge.textContent = (settings && settings.max_fps) ? `${settings.max_fps} FPS` : (fpsMap[profileName] || '30 FPS');
+    }
+  }
+
+  async refreshConfig() {
+    const res = await window.api.call('get_config');
+    if (res && res.success && res.data) {
+      this.set('config', res.data);
+      if (res.data.performance_profile) {
+        this.setProfile(res.data.performance_profile);
+      }
+    }
+  }
+
   async refreshAll() {
     await Promise.all([
       this.refreshWallpapers(),
       this.refreshCurrent(),
-      this.refreshStats()
+      this.refreshStats(),
+      this.refreshConfig()
     ]);
   }
 }

@@ -11,6 +11,7 @@ class TestWallpaperManager(unittest.TestCase):
         self.assertIn("gnome", self.mgr.engines)
         self.assertIn("kde", self.mgr.engines)
         self.assertIn("mpvpaper", self.mgr.engines)
+        self.assertIn("gtk_video", self.mgr.engines)
         self.assertIn("swww", self.mgr.engines)
         self.assertIn("fallback", self.mgr.engines)
 

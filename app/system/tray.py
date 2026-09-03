@@ -31,11 +31,50 @@ class SystemTrayManager:
         self._thread: Optional[threading.Thread] = None
         self.is_available = False
 
+        self._init_tray()
+
+    def _init_tray(self) -> None:
+        """Détecte la disponibilité du System Tray selon l'environnement Linux."""
         try:
+            import os
+            # 1. Vérifier si AppIndicator3 ou AyatanaAppIndicator3 est disponible via GObject
+            has_appindicator = False
+            try:
+                import gi
+                gi.require_version("AppIndicator3", "0.1")
+                from gi.repository import AppIndicator3  # noqa: F401
+                has_appindicator = True
+            except Exception:
+                try:
+                    import gi
+                    gi.require_version("AyatanaAppIndicator3", "0.1")
+                    from gi.repository import AyatanaAppIndicator3  # noqa: F401
+                    has_appindicator = True
+                except Exception:
+                    has_appindicator = False
+
+            # 2. Si pas d'AppIndicator, tester si un Tray Manager X11 écoute
+            if not has_appindicator:
+                os.environ.setdefault("PYSTRAY_BACKEND", "xorg")
+                try:
+                    from Xlib import display
+                    d = display.Display()
+                    tray_atom = d.intern_atom(f"_NET_SYSTEM_TRAY_S{d.get_default_screen()}")
+                    owner = d.get_selection_owner(tray_atom)
+                    d.close()
+                    if not owner:
+                        logger.info("Aucun gestionnaire de barre des tâches (System Tray) actif sous cette session. Mode fenêtre standard activé.")
+                        self.is_available = False
+                        return
+                except Exception:
+                    self.is_available = False
+                    return
+
             import pystray
             self.is_available = True
-        except ImportError:
-            logger.info("Module 'pystray' non disponible. L'icône de tray sera désactivée.")
+        except Exception as e:
+            logger.info("System Tray non disponible (%s). L'icône de tray sera désactivée.", e)
+            self.is_available = False
 
     def _create_tray_icon_image(self) -> Image.Image:
         """Génère une icône minimaliste moderne 64x64."""
