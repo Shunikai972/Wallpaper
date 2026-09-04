@@ -116,9 +116,30 @@ if command -v ffmpeg &>/dev/null; then
 fi
 
 if command -v mpv &>/dev/null; then
-    echo "✓ MPV natif disponible : $(command -v mpv)"
-elif command -v flatpak &>/dev/null && flatpak info io.github.celluloid_player.Celluloid &>/dev/null; then
-    echo "✓ MPV accéléré Flatpak disponible (Celluloid / tous codecs H264 & HEVC activés)"
+    echo "✓ MPV disponible : $(command -v mpv)"
+elif [ -x "${HOME}/.local/bin/mpv" ]; then
+    echo "✓ Wrapper MPV disponible : ${HOME}/.local/bin/mpv"
+elif command -v flatpak &>/dev/null && flatpak info io.mpv.Mpv &>/dev/null; then
+    echo "✓ MPV officiel Flatpak disponible (io.mpv.Mpv / tous codecs H264 & HEVC activés)"
+    mkdir -p "${HOME}/.local/bin"
+    cat << 'EOF_MPV' > "${HOME}/.local/bin/mpv"
+#!/bin/bash
+exec flatpak run --filesystem=host io.mpv.Mpv "$@"
+EOF_MPV
+    chmod +x "${HOME}/.local/bin/mpv"
+elif command -v flatpak &>/dev/null; then
+    echo "ℹ Installation de MPV officiel via Flatpak (io.mpv.Mpv)..."
+    flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo 2>/dev/null || true
+    flatpak install --user -y flathub io.mpv.Mpv 2>/dev/null || true
+    if flatpak info io.mpv.Mpv &>/dev/null; then
+        mkdir -p "${HOME}/.local/bin"
+        cat << 'EOF_MPV' > "${HOME}/.local/bin/mpv"
+#!/bin/bash
+exec flatpak run --filesystem=host io.mpv.Mpv "$@"
+EOF_MPV
+        chmod +x "${HOME}/.local/bin/mpv"
+        echo "✓ MPV configuré dans ${HOME}/.local/bin/mpv"
+    fi
 else
     echo "ℹ MPV non installé : le moteur autonome haute fidélité prendra le relais pour les vidéos"
 fi
@@ -317,12 +338,6 @@ if [ -d "\$WP_DIR" ]; then
     if [ ! -f "\${HOME}/.config/autostart/wallpapermaison.desktop" ]; then
         mkdir -p "\${HOME}/.config/autostart" 2>/dev/null
         cp "\${WP_DIR}/scripts/autostart.desktop" "\${HOME}/.config/autostart/wallpapermaison.desktop" 2>/dev/null || true
-    fi
-
-    if [ -n "\$DISPLAY" ] || [ -n "\$WAYLAND_DISPLAY" ]; then
-        if ! pgrep -f "app.main --daemon" >/dev/null 2>&1 && ! pgrep -f "app.main" >/dev/null 2>&1; then
-            ("\${WP_DIR}/scripts/run.sh" --daemon >/dev/null 2>&1 &)
-        fi
     fi
 fi
 EOF

@@ -42,15 +42,18 @@ class GtkVideoWallpaperEngine(BaseWallpaperEngine):
     def is_available(self) -> bool:
         # Nécessite un serveur d'affichage X11 ou Xwayland (standard sous GNOME Wayland)
         has_display = bool(os.environ.get("DISPLAY"))
-        has_mpv = bool(shutil.which("mpv")) or self._has_flatpak_mpv()
+        has_mpv = bool(shutil.which("mpv")) or self._has_mpv_player()
         return has_display and has_mpv
 
     @staticmethod
-    def _has_flatpak_mpv() -> bool:
+    def _has_mpv_player() -> bool:
+        user_mpv = Path.home() / ".local" / "bin" / "mpv"
+        if user_mpv.exists() and os.access(user_mpv, os.X_OK):
+            return True
         if shutil.which("flatpak"):
             try:
                 res = subprocess.run(
-                    ["flatpak", "info", "io.github.celluloid_player.Celluloid"],
+                    ["flatpak", "info", "io.mpv.Mpv"],
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
                 )
                 return res.returncode == 0
@@ -139,9 +142,12 @@ class GtkVideoWallpaperEngine(BaseWallpaperEngine):
                     else:
                         self._proc.terminate()
                     self._proc.wait(timeout=1.0)
+                else:
+                    self._proc.wait(timeout=0.2)
             except Exception:
                 try:
                     self._proc.kill()
+                    self._proc.wait(timeout=0.5)
                 except Exception:
                     pass
             self._proc = None
@@ -163,6 +169,12 @@ class GtkVideoWallpaperEngine(BaseWallpaperEngine):
             pass
 
     def get_status(self) -> Dict[str, Any]:
+        if self._proc and self._proc.poll() is not None:
+            try:
+                self._proc.wait(timeout=0.1)
+            except Exception:
+                pass
+            self._proc = None
         is_running = bool(self._proc and self._proc.poll() is None)
         return {
             "name": self.name,

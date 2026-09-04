@@ -1,6 +1,7 @@
 """Point d'entrée principal de l'application WallpaperMaison."""
 
 import argparse
+import fcntl
 import logging
 import os
 import signal
@@ -30,6 +31,21 @@ from app.system.window_monitor import window_monitor
 from app.wallpaper.manager import wallpaper_manager
 
 logger = setup_logger(LOGS_DIR)
+
+_app_lock_file = None
+
+def acquire_app_lock() -> bool:
+    """Garantit qu'une seule instance de WallpaperMaison s'exécute à la fois."""
+    global _app_lock_file
+    lock_path = Path("/tmp/wallpapermaison_app.lock")
+    try:
+        _app_lock_file = open(lock_path, "w")
+        fcntl.flock(_app_lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        _app_lock_file.write(f"{os.getpid()}\n")
+        _app_lock_file.flush()
+        return True
+    except (IOError, BlockingIOError, PermissionError):
+        return False
 
 class Application:
     """Gestionnaire du cycle de vie de l'application."""
@@ -175,6 +191,14 @@ def main() -> None:
         from app.media.scanner import media_scanner
         media_scanner.scan_directories_sync([args.scan], recursive=True)
         return
+
+    if not args.restore and not args.scan:
+        if not acquire_app_lock():
+            if args.daemon:
+                logger.info("WallpaperMaison est déjà actif en arrière-plan. Sortie.")
+            else:
+                logger.info("WallpaperMaison est déjà en cours d'exécution.")
+            sys.exit(0)
 
     app = Application(start_minimized=args.minimized, daemon_mode=args.daemon)
     app.run()

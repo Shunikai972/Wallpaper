@@ -12,6 +12,7 @@ else
     PYTHON_EXEC="python3"
 fi
 
+export PATH="${HOME}/.local/bin:${SCRIPT_DIR}/scripts:${PATH}"
 export PYSTRAY_BACKEND="${PYSTRAY_BACKEND:-xorg}"
 export PYTHONPATH="${SCRIPT_DIR}:${PYTHONPATH}"
 

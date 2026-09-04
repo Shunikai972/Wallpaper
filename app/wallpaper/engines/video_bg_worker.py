@@ -55,10 +55,22 @@ class VideoBackgroundWorker:
             pass
 
     def _get_mpv_command(self, xid: int) -> list:
+        user_mpv = os.path.expanduser("~/.local/bin/mpv")
         if shutil.which("mpv"):
             mpv_bin = ["mpv"]
+        elif os.path.exists(user_mpv) and os.access(user_mpv, os.X_OK):
+            mpv_bin = [user_mpv]
+        elif shutil.which("flatpak"):
+            try:
+                res = subprocess.run(["flatpak", "info", "io.mpv.Mpv"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                if res.returncode == 0:
+                    mpv_bin = ["flatpak", "run", "--filesystem=host", "io.mpv.Mpv"]
+                else:
+                    mpv_bin = ["mpv"]
+            except Exception:
+                mpv_bin = ["mpv"]
         else:
-            mpv_bin = ["flatpak", "run", "--filesystem=host", "--command=mpv", "io.github.celluloid_player.Celluloid"]
+            mpv_bin = ["mpv"]
 
         cmd = mpv_bin + [
             f"--wid={xid}",
@@ -189,9 +201,12 @@ class VideoBackgroundWorker:
                 if self.mpv_proc.poll() is None:
                     self.mpv_proc.terminate()
                     self.mpv_proc.wait(timeout=1.0)
+                else:
+                    self.mpv_proc.wait(timeout=0.2)
             except Exception:
                 try:
                     self.mpv_proc.kill()
+                    self.mpv_proc.wait(timeout=0.5)
                 except Exception:
                     pass
             self.mpv_proc = None
@@ -206,6 +221,15 @@ class VideoBackgroundWorker:
         if os.path.exists(self.ipc_socket):
             try:
                 os.remove(self.ipc_socket)
+            except Exception:
+                pass
+
+        if os.path.exists(PID_FILE):
+            try:
+                with open(PID_FILE, "r") as f:
+                    stored_pid = int(f.read().strip())
+                if stored_pid == os.getpid():
+                    os.remove(PID_FILE)
             except Exception:
                 pass
 
