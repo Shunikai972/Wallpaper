@@ -18,6 +18,7 @@ from app.wallpaper.engines.swww_engine import SwwwWallpaperEngine
 from app.wallpaper.engines.xwinwrap_engine import XwinwrapWallpaperEngine
 from app.wallpaper.engines.feh_engine import FehWallpaperEngine
 from app.wallpaper.engines.gtk_video_engine import GtkVideoWallpaperEngine
+from app.wallpaper.engines.hanabi_engine import HanabiWallpaperEngine
 from app.wallpaper.engines.fallback_engine import FallbackWallpaperEngine
 
 logger = logging.getLogger("wallpapermaison.wallpaper_manager")
@@ -29,6 +30,7 @@ class WallpaperManager:
         self.engines: Dict[str, BaseWallpaperEngine] = {
             "gnome": GnomeWallpaperEngine(),
             "kde": KdeWallpaperEngine(),
+            "hanabi": HanabiWallpaperEngine(),
             "mpvpaper": MpvpaperWallpaperEngine(),
             "gtk_video": GtkVideoWallpaperEngine(),
             "swww": SwwwWallpaperEngine(),
@@ -59,11 +61,14 @@ class WallpaperManager:
 
         # Cas 1: Vidéo
         if media_type == "video":
+            # 1. Priorité absolue : Extension GNOME Shell native (vidéo directement dans le compositeur Mutter)
+            if self.engines["hanabi"].is_available():
+                return self.engines["hanabi"]
             if session == "wayland" and tools.get("mpvpaper", {}).get("installed"):
                 return self.engines["mpvpaper"]
             elif session == "x11" and tools.get("xwinwrap", {}).get("installed"):
                 return self.engines["xwinwrap"]
-            # Moteur vidéo autonome accéléré (fonctionne sous GNOME Wayland/Xwayland sans root)
+            # Moteur vidéo autonome accéléré (fenêtre de fond d'écran MPV)
             if self.engines["gtk_video"].is_available():
                 return self.engines["gtk_video"]
             # Si pas de moteur vidéo externe, tenter mpvpaper ou fallback
