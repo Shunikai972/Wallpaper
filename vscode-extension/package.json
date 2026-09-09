@@ -1,0 +1,328 @@
+{
+	"name": "live-wallpaper",
+	"displayName": "Live Wallpaper",
+	"description": "Set a live MP4 video as your VSCode background wallpaper",
+	"version": "1.0.9",
+	"publisher": "budicuy",
+	"author": "budicuy",
+	"icon": "icon.png",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/budicuy/live-wallpaper.git"
+	},
+	"license": "MIT",
+	"engines": {
+		"vscode": "^1.80.0"
+	},
+	"categories": [
+		"Other",
+		"Themes"
+	],
+	"keywords": [
+		"background",
+		"wallpaper",
+		"video",
+		"live wallpaper",
+		"mp4"
+	],
+	"activationEvents": [
+		"onStartupFinished"
+	],
+	"extensionKind": [
+		"ui"
+	],
+	"main": "./out/extension",
+	"scripts": {
+		"vscode:prepublish": "npm run compile",
+		"vscode:uninstall": "node ./out/uninstall",
+		"compile": "tsc -p ./",
+		"watch": "tsc -watch -p ./",
+		"package": "vsce package",
+		"lint": " tsc --noEmit && biome lint ./src",
+		"format": "tsc --noEmit &&biome format --write ./src",
+		"check": "tsc --noEmit &&biome check --write ./src"
+	},
+	"contributes": {
+		"commands": [
+			{
+				"command": "liveWallpaper.apply",
+				"category": "Live Wallpaper",
+				"title": "Apply and Reload"
+			},
+			{
+				"command": "liveWallpaper.enable",
+				"category": "Live Wallpaper",
+				"title": "Enable and Reload"
+			},
+			{
+				"command": "liveWallpaper.disable",
+				"category": "Live Wallpaper",
+				"title": "Disable and Reload"
+			},
+			{
+				"command": "liveWallpaper.reset",
+				"category": "Live Wallpaper",
+				"title": "Reset to Defaults"
+			},
+			{
+				"command": "liveWallpaper.uninstall",
+				"category": "Live Wallpaper",
+				"title": "Uninstall Extension"
+			},
+			{
+				"command": "liveWallpaper.createTemplate",
+				"category": "Live Wallpaper",
+				"title": "Create Template Setup"
+			},
+			{
+				"command": "liveWallpaper.openView",
+				"category": "Live Wallpaper",
+				"title": "Open Wallpaper Player View"
+			},
+			{
+				"command": "liveWallpaper.extractNow",
+				"category": "Live Wallpaper",
+				"title": "Extract & Apply Dynamic Colors Now"
+			},
+			{
+				"command": "liveWallpaper.toggleDynamicColors",
+				"category": "Live Wallpaper",
+				"title": "Toggle Dynamic Colors"
+			},
+			{
+				"command": "liveWallpaper.clearDynamicColors",
+				"category": "Live Wallpaper",
+				"title": "Clear Dynamic Theme Colors"
+			},
+			{
+				"command": "liveWallpaper.openSudoTerminal",
+				"category": "⚡ Sudo Root",
+				"title": "⚡ Terminal Sudo Root",
+				"icon": "$(shield)"
+			},
+			{
+				"command": "liveWallpaper.splitSudoTerminal",
+				"category": "⚡ Sudo Root",
+				"title": "⚡ Split Terminal Sudo Root",
+				"icon": "$(split-horizontal)"
+			}
+		],
+		"menus": {
+			"view/title": [
+				{
+					"command": "liveWallpaper.openSudoTerminal",
+					"when": "view == terminal",
+					"group": "navigation@1"
+				},
+				{
+					"command": "liveWallpaper.splitSudoTerminal",
+					"when": "view == terminal",
+					"group": "navigation@2"
+				}
+			],
+			"terminal/context": [
+				{
+					"command": "liveWallpaper.openSudoTerminal",
+					"group": "create@1"
+				},
+				{
+					"command": "liveWallpaper.splitSudoTerminal",
+					"group": "create@2"
+				}
+			],
+			"terminal/title/context": [
+				{
+					"command": "liveWallpaper.openSudoTerminal",
+					"group": "create@1"
+				},
+				{
+					"command": "liveWallpaper.splitSudoTerminal",
+					"group": "create@2"
+				}
+			]
+		},
+		"viewsContainers": {
+			"activitybar": [
+				{
+					"id": "sudo-root-container",
+					"title": "⚡ Sudo Root",
+					"icon": "sudo-icon.svg"
+				}
+			]
+		},
+		"views": {
+			"sudo-root-container": [
+				{
+					"id": "sudo-root-view",
+					"name": "⚡ Terminal Root Administrateur",
+					"type": "webview"
+				}
+			]
+		},
+		"configuration": {
+			"type": "object",
+			"title": "Live Wallpaper",
+			"properties": {
+				"liveWallpaper": {
+					"type": "object",
+					"description": "Live Wallpaper Configuration",
+					"default": {
+						"videoPath": "",
+						"opacity": 0.1,
+						"size": "cover",
+						"enabled": true,
+						"loop": true
+					},
+					"properties": {
+						"videoPath": {
+							"type": "string",
+							"default": "",
+							"markdownDescription": "Absolute path to an MP4 (H.264) video file to use as the background wallpaper.\n\nExamples:\n- **Linux/macOS**: `/home/user/videos/wallpaper.mp4`\n- **Windows**: `C:/Users/user/Videos/wallpaper.mp4`\n- **file:// URL**: `file:///home/user/videos/wallpaper.mp4`"
+						},
+						"opacity": {
+							"type": "number",
+							"default": 0.1,
+							"minimum": 0.1,
+							"maximum": 1,
+							"markdownDescription": "Opacity of the video wallpaper (0.1 – 1.0). The value is scaled so that `1.0` renders at 80% actual CSS opacity to keep the UI always visible. Recommended: `0.1` – `0.5`."
+						},
+						"size": {
+							"type": "string",
+							"default": "cover",
+							"enum": [
+								"cover",
+								"contain",
+								"fill",
+								"auto"
+							],
+							"enumDescriptions": [
+								"Scale video to fill the entire window (may crop edges)",
+								"Scale video to fit within the window (may show letterboxing)",
+								"Stretch video to fill the window (may distort aspect ratio)",
+								"Use the video's natural size"
+							],
+							"markdownDescription": "Controls how the video is sized relative to the VSCode window."
+						},
+						"enabled": {
+							"type": "boolean",
+							"default": true,
+							"markdownDescription": "Enable or disable the live wallpaper. When disabled, the video background is removed from VSCode."
+						},
+						"loop": {
+							"type": "boolean",
+							"default": true,
+							"markdownDescription": "Whether the video should loop continuously."
+						},
+						"syncWithWallpaperMaison": {
+							"type": "boolean",
+							"default": true,
+							"markdownDescription": "Automatically synchronize video and colors with WallpaperMaison (desktop wallpaper)."
+						},
+						"colors": {
+							"type": "object",
+							"description": "Dynamic Color Extraction & Theme Synchronization",
+							"default": {
+								"enabled": true,
+								"mode": "auto",
+								"updateInterval": 3000,
+								"smoothing": 0.25,
+								"changeThreshold": 4.0,
+								"saturation": 1.0,
+								"contrast": 1.0,
+								"analysisResolution": "160x90",
+								"debug": false
+							},
+							"properties": {
+								"enabled": {
+									"type": "boolean",
+									"default": true,
+									"markdownDescription": "Enable dynamic theme coloring based on current wallpaper."
+								},
+								"mode": {
+									"type": "string",
+									"default": "auto",
+									"enum": [
+										"auto",
+										"dominant",
+										"vibrant",
+										"ambient",
+										"muted"
+									],
+									"markdownDescription": "Color selection palette mode."
+								},
+								"updateInterval": {
+									"type": "number",
+									"default": 3000,
+									"minimum": 500,
+									"maximum": 60000,
+									"markdownDescription": "Color update interval in milliseconds for video wallpapers."
+								},
+								"smoothing": {
+									"type": "number",
+									"default": 0.25,
+									"minimum": 0.05,
+									"maximum": 1.0,
+									"markdownDescription": "Temporal smoothing factor (LERP alpha). Lower = smoother transitions."
+								},
+								"changeThreshold": {
+									"type": "number",
+									"default": 4.0,
+									"minimum": 0.5,
+									"maximum": 20.0,
+									"markdownDescription": "Delta E color difference threshold before applying changes to VS Code."
+								},
+								"saturation": {
+									"type": "number",
+									"default": 1.0,
+									"minimum": 0.0,
+									"maximum": 2.0,
+									"markdownDescription": "Multiplier for extracted color saturation."
+								},
+								"contrast": {
+									"type": "number",
+									"default": 1.0,
+									"minimum": 0.5,
+									"maximum": 2.0,
+									"markdownDescription": "Multiplier for extracted color contrast."
+								},
+								"analysisResolution": {
+									"type": "string",
+									"default": "160x90",
+									"enum": [
+										"80x45",
+										"160x90",
+										"320x180"
+									],
+									"markdownDescription": "Downscaled resolution for video frame extraction."
+								},
+								"debug": {
+									"type": "boolean",
+									"default": false,
+									"markdownDescription": "Log color extraction and synchronization details to Output channel."
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.5.0",
+		"@types/node": "^20.0.0",
+		"@types/vscode": "^1.80.0",
+		"@vscode/vsce": "^3.9.2",
+		"typescript": "^5.3.3"
+	},
+	"dependencies": {
+		"@vscode/sudo-prompt": "^9.3.2"
+	},
+	"trustedDependencies": [
+		"@vscode/vsce-sign"
+	],
+	"__metadata": {
+		"installedTimestamp": 1788946167367,
+		"targetPlatform": "undefined",
+		"size": 169911
+	}
+}

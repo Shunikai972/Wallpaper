@@ -1,6 +1,8 @@
 """Gestionnaire central et orchestrateur des moteurs de fond d'écran."""
 
 import logging
+import subprocess
+import sys
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
@@ -148,6 +150,8 @@ class WallpaperManager:
             self._current_wallpapers[monitor] = wp
             self._is_paused = False
             db.record_applied(wallpaper_id, monitor=monitor)
+            if media_type == "video":
+                self._sync_vscode(effective_path)
             bus.emit("wallpaper_changed", wallpaper=wp, monitor=monitor, engine=engine.name)
             return True
         else:
@@ -201,6 +205,30 @@ class WallpaperManager:
         except Exception as e:
             logger.error("Erreur lors de la restauration du fond d'écran: %s", e)
         return False
+
+    def _sync_vscode(self, video_path: str) -> None:
+        """Synchronise automatiquement le live wallpaper avec Visual Studio Code."""
+        try:
+            dl_dir = Path.home() / "reseau/Perso/Téléchargements"
+            if not dl_dir.exists():
+                dl_dir = Path.home() / "Téléchargements"
+                if not dl_dir.exists():
+                    dl_dir = Path.home() / "Downloads"
+            if dl_dir.exists():
+                link = dl_dir / "wallpaper.mp4"
+                if link.is_symlink() or link.exists():
+                    link.unlink()
+                link.symlink_to(video_path)
+        except Exception as e:
+            logger.debug("Impossible de mettre à jour le lien wallpaper.mp4: %s", e)
+
+        try:
+            patch_script = Path(__file__).resolve().parents[2] / "scripts/patch_vscode_html.py"
+            if patch_script.exists():
+                subprocess.run([sys.executable, str(patch_script), str(video_path)],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
+        except Exception as e:
+            logger.debug("Erreur patch HTML VS Code: %s", e)
 
     def get_engines_status(self) -> List[Dict[str, Any]]:
         """Retourne la liste des moteurs et leur statut pour les paramètres."""

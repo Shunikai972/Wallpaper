@@ -34,15 +34,45 @@ class HanabiWallpaperEngine(BaseWallpaperEngine):
         return ["video"]
 
     def is_available(self) -> bool:
-        if not shutil.which("gsettings") or not shutil.which("gnome-extensions"):
+        if not shutil.which("gsettings"):
             return False
         try:
-            res = subprocess.run(["gsettings", "list-keys", self.SCHEMA], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            # 1. Vérifier que le schéma GSettings de Hanabi est présent
+            res = subprocess.run(
+                ["gsettings", "list-keys", self.SCHEMA],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
             if res.returncode != 0:
                 return False
-            ext_res = subprocess.run(["gnome-extensions", "info", self.UUID], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
-            if "ENABLED" in ext_res.stdout or "ACTIVE" in ext_res.stdout:
+
+            # 2. Vérifier que les fichiers de l'extension sont présents (local ou système)
+            ext_path = Path.home() / ".local/share/gnome-shell/extensions" / self.UUID
+            sys_ext_path = Path("/usr/share/gnome-shell/extensions") / self.UUID
+            if not ext_path.exists() and not sys_ext_path.exists():
+                return False
+
+            # 3. Vérifier que l'extension est activée dans org.gnome.shell
+            g_enabled = subprocess.run(
+                ["gsettings", "get", "org.gnome.shell", "enabled-extensions"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True
+            )
+            if self.UUID in g_enabled.stdout:
                 return True
+
+            # 4. Fallback sur gnome-extensions info (tolérant localisation FR/EN)
+            if shutil.which("gnome-extensions"):
+                ext_res = subprocess.run(
+                    ["gnome-extensions", "info", self.UUID],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                    text=True
+                )
+                out = ext_res.stdout.upper()
+                if any(k in out for k in ["ENABLED", "ACTIVE", "ACTIF", "ACTIVÉ"]):
+                    return True
         except Exception:
             pass
         return False
@@ -52,9 +82,25 @@ class HanabiWallpaperEngine(BaseWallpaperEngine):
         if not p.exists():
             return False
         try:
+            # 1. Met à jour le fond d'écran statique GNOME pour un rendu immédiat et sans scintillement
+            try:
+                from app.wallpaper.engines.gnome_engine import GnomeWallpaperEngine
+                GnomeWallpaperEngine().apply(str(p), monitor=monitor, options=options)
+            except Exception as e:
+                logger.debug("Mise à jour miniature statique GNOME: %s", e)
+
+            # 2. Définir le chemin de la vidéo dans les paramètres GSettings de Hanabi
             subprocess.run(["gsettings", "set", self.SCHEMA, "video-path", str(p)], check=True)
             self._current_wallpaper = str(p)
             self._is_paused = False
+
+            # 3. S'assurer que l'extension GNOME Shell Hanabi est activée
+            if shutil.which("gnome-extensions"):
+                subprocess.run(["gnome-extensions", "enable", self.UUID], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+            # 4. Relauncher le processus renderer pour prise en compte immédiate
+            subprocess.run(["pkill", "-f", "hanabi-extension.*renderer.js"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
             logger.info("Vidéo transmise directement au compositeur GNOME Shell via Hanabi: %s", p.name)
             return True
         except Exception as e:

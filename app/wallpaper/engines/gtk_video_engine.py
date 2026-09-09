@@ -160,11 +160,16 @@ class GtkVideoWallpaperEngine(BaseWallpaperEngine):
     def _kill_all_existing_workers() -> None:
         try:
             subprocess.run(["pkill", "-9", "-f", "video_bg_worker.py"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            for sock in Path("/tmp").glob("wallpapermaison_mpv*.sock"):
-                try:
-                    sock.unlink()
-                except Exception:
-                    pass
+            dirs_to_check = [Path("/tmp")]
+            rdir = os.environ.get("XDG_RUNTIME_DIR")
+            if rdir and os.path.isdir(rdir):
+                dirs_to_check.append(Path(rdir))
+            for d in dirs_to_check:
+                for sock in d.glob("wallpapermaison_mpv*.sock"):
+                    try:
+                        sock.unlink()
+                    except Exception:
+                        pass
         except Exception:
             pass
 

@@ -21,14 +21,21 @@ gi.require_version("Gdk", "3.0")
 gi.require_version("GdkX11", "3.0")
 from gi.repository import Gtk, Gdk, GdkX11, GLib
 
-PID_FILE = "/tmp/wallpapermaison_worker.pid"
+def _get_default_runtime_path(filename: str) -> str:
+    runtime_dir = os.environ.get("XDG_RUNTIME_DIR")
+    if runtime_dir and os.path.isdir(runtime_dir):
+        return os.path.join(runtime_dir, filename)
+    return f"/tmp/wallpapermaison_{os.getuid()}_{filename}"
+
+PID_FILE = _get_default_runtime_path("wallpapermaison_worker.pid")
+DEFAULT_IPC_SOCKET = _get_default_runtime_path("wallpapermaison_mpv.sock")
 
 class VideoBackgroundWorker:
-    def __init__(self, video_path: str, fps: int = 30, hwdec: str = "auto", ipc_socket: str = "/tmp/wallpapermaison_mpv.sock") -> None:
+    def __init__(self, video_path: str, fps: int = 30, hwdec: str = "auto", ipc_socket: str = None) -> None:
         self.video_path = video_path
         self.fps = fps
         self.hwdec = hwdec
-        self.ipc_socket = ipc_socket
+        self.ipc_socket = ipc_socket or DEFAULT_IPC_SOCKET
         self.mpv_proc = None
         self.window = None
         self._ensure_singleton()
@@ -238,7 +245,7 @@ def main():
     parser.add_argument("--video", required=True, help="Chemin du fichier vidéo")
     parser.add_argument("--fps", type=int, default=30, help="Nombre max d'images/seconde")
     parser.add_argument("--hwdec", default="auto", help="Accélération matérielle")
-    parser.add_argument("--ipc", default="/tmp/wallpapermaison_mpv.sock", help="Chemin socket IPC")
+    parser.add_argument("--ipc", default=DEFAULT_IPC_SOCKET, help="Chemin socket IPC")
     args = parser.parse_args()
 
     if not os.path.exists(args.video):

@@ -40,8 +40,7 @@ class FallbackWallpaperEngine(BaseWallpaperEngine):
 
     def _extract_video_frame(self, video_path: Path) -> Optional[Path]:
         """Extrait une image clé haute résolution d'une vidéo via ffmpeg."""
-        if not shutil.which("ffmpeg"):
-            return None
+        from app.media.media_tools import run_ffmpeg
 
         PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
         file_hash = MediaMetadataExtractor.calculate_hash(video_path) or f"v_{abs(hash(str(video_path)))}"
@@ -52,13 +51,12 @@ class FallbackWallpaperEngine(BaseWallpaperEngine):
 
         try:
             cmd = [
-                "ffmpeg", "-ss", "00:00:01", "-i", str(video_path),
+                "-ss", "00:00:01", "-i", str(video_path),
                 "-vframes", "1",
                 "-q:v", "1",
                 "-y", str(out_frame)
             ]
-            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=6, check=True)
-            if out_frame.exists() and out_frame.stat().st_size > 0:
+            if run_ffmpeg(cmd, timeout=10) and out_frame.exists() and out_frame.stat().st_size > 0:
                 logger.info("Image clé haute résolution extraite de la vidéo: %s", out_frame.name)
                 return out_frame
         except Exception as e:

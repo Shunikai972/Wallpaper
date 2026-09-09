@@ -37,14 +37,11 @@ if [ -z "${BASH_SOURCE[0]}" ] || [ "${BASH_SOURCE[0]}" = "bash" ] || [ "${BASH_S
     fi
 
     echo "Lancement de l'installateur local..."
-    exec bash "${TARGET_DIR}/scripts/install.sh" "$@"
+    exec bash "${TARGET_DIR}/scripts/setup.sh" "$@"
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-VENV_DIR="${SCRIPT_DIR}/.venv"
-DESKTOP_FILE_DIR="${HOME}/.local/share/applications"
-ICON_DIR="${HOME}/.local/share/icons/hicolor/scalable/apps"
-PERSISTENT_NFS="${HOME}/reseau/Perso"
+exec bash "${SCRIPT_DIR}/scripts/setup.sh" "$@"
 
 echo "=========================================================="
 echo "      Installation de ${APP_NAME} sur Linux Fedora        "
@@ -332,8 +329,9 @@ cat <<EOF > "${AUTOSTART_RC_DIR}/wallpapermaison.sh"
 WP_DIR="${SCRIPT_DIR}"
 
 if [ -d "\$WP_DIR" ]; then
-    export PATH="\${WP_DIR}/scripts:\${HOME}/.local/bin:\$PATH"
+    export PATH="\${HOME}/.local/bin:\${WP_DIR}/scripts:\$PATH"
     alias wallpapermaison="\${WP_DIR}/scripts/run.sh"
+    alias code="\${HOME}/.local/bin/code"
 
     if [ ! -f "\${HOME}/.config/autostart/wallpapermaison.desktop" ]; then
         mkdir -p "\${HOME}/.config/autostart" 2>/dev/null

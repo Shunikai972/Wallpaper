@@ -1,0 +1,54 @@
+#!/bin/bash
+TARGET_DIR="${PWD:-$HOME}"
+
+USE_SYSTEMD=0
+if [ -f /proc/self/uid_map ] && ! grep -q "4294967295" /proc/self/uid_map && command -v systemd-run >/dev/null 2>&1; then
+    USE_SYSTEMD=1
+fi
+
+RUNNER=()
+if [ "$USE_SYSTEMD" = "1" ]; then
+    if [ -t 0 ] && [ -t 1 ]; then
+        RUNNER=(systemd-run --user --pty --quiet)
+    else
+        RUNNER=(systemd-run --user --pipe --wait --quiet)
+    fi
+fi
+
+if [ -t 0 ] && [ -t 1 ]; then
+    PODMAN_TTY=(-it)
+else
+    PODMAN_TTY=(-i)
+fi
+
+exec "${RUNNER[@]}" podman run "${PODMAN_TTY[@]}" --rm --privileged --uts=host -v /:/host alpine chroot /host /usr/bin/env \
+    HOME="$HOME" \
+    LANG="${LANG:-fr_FR.UTF-8}" \
+    LC_ALL="${LC_ALL:-fr_FR.UTF-8}" \
+    TERM="${TERM:-xterm-256color}" \
+    PATH="$HOME/.local/bin:$HOME/reseau/Perso/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
+    /usr/bin/bash -c '
+cd "$1" 2>/dev/null || cd /
+shift
+sudo() {
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -i|-s) shift; if [ $# -eq 0 ]; then return 0; fi ;;
+            -u|-g|-p|-C|-c|-T) shift 2 ;;
+            --) shift; break ;;
+            -*) shift ;;
+            *) break ;;
+        esac
+    done
+    if [ $# -eq 0 ]; then return 0; fi
+    "$@"
+}
+export -f sudo 2>/dev/null
+if [ $# -eq 0 ]; then
+    export PS1="\[\033[01;31m\]⚡ root@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]# "
+    exec /usr/bin/bash --norc -i
+elif [[ "$1" == -* ]]; then
+    exec /usr/bin/bash "$@"
+else
+    exec "$@"
+fi' bash "$TARGET_DIR" "$@"

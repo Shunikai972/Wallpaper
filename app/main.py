@@ -35,9 +35,13 @@ logger = setup_logger(LOGS_DIR)
 _app_lock_file = None
 
 def acquire_app_lock() -> bool:
-    """Garantit qu'une seule instance de WallpaperMaison s'exécute à la fois."""
+    """Garantit qu'une seule instance de WallpaperMaison s'exécute à la fois par utilisateur."""
     global _app_lock_file
-    lock_path = Path("/tmp/wallpapermaison_app.lock")
+    runtime_dir = os.environ.get("XDG_RUNTIME_DIR")
+    if runtime_dir and os.path.isdir(runtime_dir):
+        lock_path = Path(runtime_dir) / "wallpapermaison_app.lock"
+    else:
+        lock_path = Path(f"/tmp/wallpapermaison_{os.getuid()}_app.lock")
     try:
         _app_lock_file = open(lock_path, "w")
         fcntl.flock(_app_lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)

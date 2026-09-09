@@ -1,8 +1,8 @@
 [Desktop Entry]
 Type=Application
-Name=WallpaperMaison
-Comment=Restauration et gestion automatique des fonds d'écran
-Exec=/var/home/E256190S/reseau/Perso/Bureau/Wallpaper/scripts/run.sh --daemon
+Name=WallpaperMaison Daemon
+Comment=Démarrage automatique et restauration de vos fonds d'écran
+Exec=sh -c 'for p in "$HOME/reseau/Perso/Bureau/Wallpaper" "$HOME/reseau/Perso/Wallpaper" "$HOME/Wallpaper" "$HOME/Bureau/Wallpaper"; do if [ -x "$p/scripts/run.sh" ]; then exec "$p/scripts/run.sh" --daemon; fi; done'
 Hidden=false
 NoDisplay=true
 X-GNOME-Autostart-enabled=true
