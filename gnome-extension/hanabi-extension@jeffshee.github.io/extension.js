@@ -709,6 +709,19 @@ var WaylandSubprocess = class {
   constructor(flags = Gio4.SubprocessFlags.NONE) {
     this.flags = flags | Gio4.SubprocessFlags.STDOUT_PIPE | Gio4.SubprocessFlags.STDERR_MERGE;
     this.launcher = new Gio4.SubprocessLauncher({ flags: this.flags });
+    const homeDir = GLib4.get_home_dir();
+    const candidateLibDirs = [
+      GLib4.build_filenamev([homeDir, ".local", "lib"]),
+      GLib4.build_filenamev([homeDir, "reseau", "Perso", ".local", "lib"])
+    ];
+    const existingLd = this.launcher.getenv("LD_LIBRARY_PATH") || "";
+    const validLibDirs = candidateLibDirs.filter((d) => GLib4.file_test(d, GLib4.FileTest.IS_DIR));
+    if (validLibDirs.length > 0) {
+      this.launcher.setenv("LD_LIBRARY_PATH", validLibDirs.join(":") + (existingLd ? `:${existingLd}` : ""), true);
+    }
+  }
+  setEnv(key, value) {
+    this.launcher?.setenv(key, value, true);
   }
   spawn(argv) {
     this.waylandClient = Meta3.WaylandClient.new_subprocess(
@@ -1963,10 +1976,9 @@ var HanabiExtension = class extends Extension {
       "changed::video-path",
       () => {
         const v = this.settings.get_string("video-path");
-        logger7.debug(`video-path changed to "${v}", reloading renderer and backgrounds`);
-        this.killCurrentProcess();
-        if (this.shellOverride) {
-          this.shellOverride.reloadBackgrounds();
+        logger7.debug(`video-path changed to "${v}"`);
+        if (!this.currentProcess) {
+          this.launchRenderer();
         }
       }
     );
@@ -2021,6 +2033,19 @@ var HanabiExtension = class extends Extension {
     argv.push("-F", videoPath);
     this.currentProcess = new WaylandSubprocess();
     this.currentProcess.setCwd(GLib8.get_home_dir());
+    const homeDir = GLib8.get_home_dir();
+    const candidateLibDirs = [
+      GLib8.build_filenamev([this.path, "lib"]),
+      GLib8.build_filenamev([homeDir, ".local", "lib"]),
+      GLib8.build_filenamev([homeDir, "reseau", "Perso", ".local", "lib"]),
+      GLib8.build_filenamev([homeDir, "reseau", "Perso", "Bureau", "Wallpaper", "gnome-extension", "hanabi-extension@jeffshee.github.io", "lib"])
+    ];
+    const existingLd = this.currentProcess.launcher?.getenv("LD_LIBRARY_PATH") || "";
+    const validLibDirs = candidateLibDirs.filter((d) => GLib8.file_test(d, GLib8.FileTest.IS_DIR));
+    if (validLibDirs.length > 0) {
+      const newLd = validLibDirs.join(":") + (existingLd ? `:${existingLd}` : "");
+      this.currentProcess.setEnv("LD_LIBRARY_PATH", newLd);
+    }
     this.currentProcess.spawn(argv);
     this.windowManager.setWaylandClient(this.currentProcess);
     this.currentProcess.subprocess.wait_async(null, (obj, res) => {

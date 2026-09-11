@@ -27,6 +27,17 @@ if [ -n "$WP_DIR" ] && [ -f "$WP_DIR/scripts/root-shell" ]; then
     fi
 fi
 
+# 2.5 Déploiement et synchronisation du codec Cisco OpenH264 (H.264 matériel et Chromium)
+REAL_LIB=""
+if [ -f "$HOME/.local/lib/libopenh264.so.8" ]; then
+    REAL_LIB="$HOME/.local/lib/libopenh264.so.8"
+elif [ -f "$HOME/reseau/Perso/.local/lib/libopenh264.so.8" ]; then
+    mkdir -p "$HOME/.local/lib" 2>/dev/null || true
+    cp -af "$HOME/reseau/Perso/.local/lib"/libopenh264* "$HOME/.local/lib/" 2>/dev/null || true
+    REAL_LIB="$HOME/.local/lib/libopenh264.so.8"
+fi
+export LD_LIBRARY_PATH="$HOME/.local/lib:$HOME/reseau/Perso/.local/lib:${LD_LIBRARY_PATH}"
+
 # 3. Synchronisation automatique des extensions (locale + tmp)
 mkdir -p "$HOME/.vscode/extensions" /var/tmp/visual_extensions 2>/dev/null || true
 
@@ -34,6 +45,10 @@ mkdir -p "$HOME/.vscode/extensions" /var/tmp/visual_extensions 2>/dev/null || tr
 if [ -n "$WP_DIR" ] && [ -d "$WP_DIR/vscode-extension" ]; then
     mkdir -p "$HOME/.vscode/extensions/budicuy.live-wallpaper-1.0.9"
     cp -rf "$WP_DIR/vscode-extension"/* "$HOME/.vscode/extensions/budicuy.live-wallpaper-1.0.9/" 2>/dev/null || true
+    if [ -d "$HOME/reseau/Perso/.vscode/extensions" ]; then
+        mkdir -p "$HOME/reseau/Perso/.vscode/extensions/budicuy.live-wallpaper-1.0.9"
+        cp -rf "$WP_DIR/vscode-extension"/* "$HOME/reseau/Perso/.vscode/extensions/budicuy.live-wallpaper-1.0.9/" 2>/dev/null || true
+    fi
 fi
 
 # Synchroniser toutes les extensions vers /var/tmp/visual_extensions
@@ -48,7 +63,10 @@ if [ -n "$WP_DIR" ] && [ -f "$WP_DIR/scripts/register_extension.py" ]; then
     python3 "$WP_DIR/scripts/register_extension.py" 2>/dev/null || true
 fi
 
-# 4. Vérification et injection de workbench.html et preload.js
+# 4. Mise à jour et injection de workbench.html et preload.js
+if [ -n "$WP_DIR" ] && [ -f "$WP_DIR/scripts/patch_vscode_html.py" ]; then
+    python3 "$WP_DIR/scripts/patch_vscode_html.py" 2>/dev/null || true
+fi
 P_HTML="$HOME/reseau/Perso/.config/wallpapermaison/vscode/workbench.html"
 [ ! -f "$P_HTML" ] && P_HTML="$HOME/.config/wallpapermaison/vscode/workbench.html"
 T_HTML="/usr/apps/VSCode-linux-x64/resources/app/out/vs/code/electron-browser/workbench/workbench.html"
@@ -56,12 +74,6 @@ T_HTML="/usr/apps/VSCode-linux-x64/resources/app/out/vs/code/electron-browser/wo
 P_PRELOAD="$HOME/reseau/Perso/.config/wallpapermaison/vscode/preload.js"
 [ ! -f "$P_PRELOAD" ] && P_PRELOAD="$HOME/.config/wallpapermaison/vscode/preload.js"
 T_PRELOAD="/usr/apps/VSCode-linux-x64/resources/app/out/vs/base/parts/sandbox/electron-browser/preload.js"
-
-if [ ! -f "$P_HTML" ] || [ ! -f "$P_PRELOAD" ]; then
-    if [ -n "$WP_DIR" ] && [ -f "$WP_DIR/scripts/patch_vscode_html.py" ]; then
-        python3 "$WP_DIR/scripts/patch_vscode_html.py" 2>/dev/null || true
-    fi
-fi
 
 # 5. Détection du binaire VS Code réel
 VSCODE_BIN="/usr/apps/VSCode-linux-x64/code"
@@ -92,6 +104,14 @@ if command -v bwrap >/dev/null 2>&1 && [ -f "$P_HTML" ] && [ -f "$T_HTML" ] && [
     BWRAP_ARGS="--dev-bind / / --ro-bind $P_HTML $T_HTML"
     if [ -f "$P_PRELOAD" ] && [ -f "$T_PRELOAD" ]; then
         BWRAP_ARGS="$BWRAP_ARGS --ro-bind $P_PRELOAD $T_PRELOAD"
+    fi
+    if [ -n "$REAL_LIB" ] && [ -f "$REAL_LIB" ]; then
+        if [ -f "/usr/lib64/libopenh264.so.8" ]; then
+            BWRAP_ARGS="$BWRAP_ARGS --ro-bind $REAL_LIB /usr/lib64/libopenh264.so.8"
+        fi
+        if [ -f "/usr/lib64/libopenh264.so.2.6.0" ]; then
+            BWRAP_ARGS="$BWRAP_ARGS --ro-bind $REAL_LIB /usr/lib64/libopenh264.so.2.6.0"
+        fi
     fi
     exec bwrap $BWRAP_ARGS "$VSCODE_BIN" --extensions-dir /var/tmp/visual_extensions "$@"
 elif [ -x "$VSCODE_BIN" ]; then

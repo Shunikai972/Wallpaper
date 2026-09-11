@@ -3,6 +3,8 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.so
+!gnome-extension/**/lib/libopenh264.so*
+!lib/libopenh264.so*
 .Python
 
 # Environnements virtuels

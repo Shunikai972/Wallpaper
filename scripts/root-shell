@@ -35,6 +35,7 @@ sudo() {
         case "$1" in
             -i|-s) shift; if [ $# -eq 0 ]; then return 0; fi ;;
             -u|-g|-p|-C|-c|-T) shift 2 ;;
+            -E|-b|-H|-k|-K|-n|-S|-v) shift ;;
             --) shift; break ;;
             -*) shift ;;
             *) break ;;
@@ -44,7 +45,18 @@ sudo() {
     "$@"
 }
 export -f sudo 2>/dev/null
+
 if [ $# -eq 0 ]; then
+    echo -e "\033[01;31m========================================================================\033[00m"
+    echo -e "\033[01;37m⚡ SESSION ROOT ADMINISTRATEUR (PODMAN PRIVILÉGIÉ & CHROOT HÔTE)\033[00m"
+    echo -e "\033[01;31m========================================================================\033[00m"
+    echo -e " • \033[01;32mPrivilèges :\033[00m UID 0 (root) - commandes root et sudo sans mot de passe"
+    echo -e " • \033[01;32mSystème hôte :\033[00m Racine / de la machine montée en chroot direct"
+    echo -e " • \033[01;33mSécurité Noyau Linux (DAC) :\033[00m"
+    echo -e "   Les dossiers privés en mode 0700 des autres comptes hôtes"
+    echo -e "   (ex: \033[01;34m/var/home/adminiut\033[00m) restent protégés par le noyau hôte."
+    echo -e " • \033[01;36mConseil :\033[00m 'adminiut' est un DOSSIER et non un fichier (utilisez 'ls')."
+    echo -e "\033[01;31m========================================================================\033[00m"
     export PS1="\[\033[01;31m\]⚡ root@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]# "
     exec /usr/bin/bash --norc -i
 elif [[ "$1" == -* ]]; then

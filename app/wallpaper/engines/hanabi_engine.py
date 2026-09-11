@@ -82,26 +82,34 @@ class HanabiWallpaperEngine(BaseWallpaperEngine):
         if not p.exists():
             return False
         try:
-            # 1. Met à jour le fond d'écran statique GNOME pour un rendu immédiat et sans scintillement
-            try:
-                from app.wallpaper.engines.gnome_engine import GnomeWallpaperEngine
-                GnomeWallpaperEngine().apply(str(p), monitor=monitor, options=options)
-            except Exception as e:
-                logger.debug("Mise à jour miniature statique GNOME: %s", e)
-
-            # 2. Définir le chemin de la vidéo dans les paramètres GSettings de Hanabi
-            subprocess.run(["gsettings", "set", self.SCHEMA, "video-path", str(p)], check=True)
-            self._current_wallpaper = str(p)
-            self._is_paused = False
-
-            # 3. S'assurer que l'extension GNOME Shell Hanabi est activée
+            # 1. S'assurer que l'extension GNOME Shell Hanabi est activée
             if shutil.which("gnome-extensions"):
                 subprocess.run(["gnome-extensions", "enable", self.UUID], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-            # 4. Relauncher le processus renderer pour prise en compte immédiate
-            subprocess.run(["pkill", "-f", "hanabi-extension.*renderer.js"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            # 2. Tenter un hot-swap instantané et sans coupure via DBus si le renderer est actif
+            hot_swapped = False
+            if shutil.which("gdbus"):
+                try:
+                    dbus_res = subprocess.run([
+                        "gdbus", "call", "--session",
+                        "--dest", "io.github.jeffshee.HanabiRenderer",
+                        "--object-path", "/io/github/jeffshee/HanabiRenderer",
+                        "--method", "io.github.jeffshee.HanabiRenderer.setFilePath",
+                        str(p)
+                    ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=1.5)
+                    if dbus_res.returncode == 0:
+                        hot_swapped = True
+                except Exception:
+                    pass
 
-            logger.info("Vidéo transmise directement au compositeur GNOME Shell via Hanabi: %s", p.name)
+            # 3. Si le renderer n'est pas encore lancé sur cette session, configurer GSettings pour le démarrer
+            if not hot_swapped:
+                subprocess.run(["gsettings", "set", self.SCHEMA, "video-path", str(p)], check=True)
+
+            self._current_wallpaper = str(p)
+            self._is_paused = False
+
+            logger.info("Vidéo transmise directement au compositeur GNOME Shell via Hanabi: %s (hot_swap=%s)", p.name, hot_swapped)
             return True
         except Exception as e:
             logger.error("Erreur lors de l'application via Hanabi: %s", e)

@@ -93,6 +93,10 @@ class LiveWallpaper {
             await this.colorEngine.start();
             return;
         }
+        if (event && event.affectsConfiguration('liveWallpaper.videoPath')) {
+            await this.colorEngine.start();
+            return;
+        }
 
         await this.colorEngine.start();
 

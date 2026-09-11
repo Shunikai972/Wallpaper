@@ -35,7 +35,8 @@ class ThemeSynchronizer {
 
         // Mode "full"
         return {
-            "editor.background": palette.editorBackground,
+            "editor.background": "#00000000",
+            "editorGroup.emptyBackground": "#00000000",
             "editor.foreground": palette.editorForeground,
             "editorCursor.foreground": palette.cursor,
             "editor.selectionBackground": palette.selection,
@@ -132,6 +133,10 @@ class ThemeSynchronizer {
             this.appliedTokens = true;
             await config.update("editor.tokenColorCustomizations", tokens, vscode_1.default.ConfigurationTarget.Global);
         }
+    }
+
+    async clearColorCustomizations() {
+        return this.clear();
     }
 
     async clear() {

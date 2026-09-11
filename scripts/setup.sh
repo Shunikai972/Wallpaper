@@ -406,6 +406,53 @@ else
     echo "ℹ️  Dossier vscode-extension non trouvé dans ${SCRIPT_DIR}."
 fi
 
+# Déploiement du wrapper gjs pour injection transparente de LD_LIBRARY_PATH
+mkdir -p "${HOME}/.local/bin"
+cat << 'EOF_GJS' > "${HOME}/.local/bin/gjs"
+#!/bin/bash
+export LD_LIBRARY_PATH="${HOME}/.local/lib:${HOME}/reseau/Perso/.local/lib:${LD_LIBRARY_PATH:-}"
+exec /usr/bin/gjs "$@"
+EOF_GJS
+chmod +x "${HOME}/.local/bin/gjs"
+if [ "$IS_PERSISTENT" = true ]; then
+    mkdir -p "${PERSISTENT_NFS}/.local/bin"
+    cp -f "${HOME}/.local/bin/gjs" "${PERSISTENT_NFS}/.local/bin/gjs"
+    chmod +x "${PERSISTENT_NFS}/.local/bin/gjs"
+fi
+
+# Déploiement des codecs vidéo Cisco OpenH264
+mkdir -p "${HOME}/.local/lib"
+H264_SRC=""
+for cand in \
+    "${SCRIPT_DIR}/gnome-extension/hanabi-extension@jeffshee.github.io/lib/libopenh264.so.8" \
+    "${SCRIPT_DIR}/lib/libopenh264.so.8" \
+    "${PERSISTENT_NFS}/.local/lib/libopenh264.so.8" \
+    "${HOME}/.local/lib/libopenh264.so.8"; do
+    if [ -f "$cand" ]; then
+        H264_SRC="$cand"
+        break
+    fi
+done
+if [ -z "$H264_SRC" ]; then
+    if command -v curl &>/dev/null && command -v bzip2 &>/dev/null; then
+        curl -sL "http://ciscobinary.openh264.org/libopenh264-2.6.0-linux64.8.so.bz2" | bzip2 -d > "${HOME}/.local/lib/libopenh264.so.8" 2>/dev/null || true
+        if [ -s "${HOME}/.local/lib/libopenh264.so.8" ]; then
+            chmod 755 "${HOME}/.local/lib/libopenh264.so.8"
+            H264_SRC="${HOME}/.local/lib/libopenh264.so.8"
+        fi
+    fi
+fi
+if [ -n "$H264_SRC" ] && [ -f "$H264_SRC" ]; then
+    for target_dir in "${HOME}/.local/lib" "${PERSISTENT_NFS}/.local/lib" "${SCRIPT_DIR}/gnome-extension/hanabi-extension@jeffshee.github.io/lib"; do
+        mkdir -p "$target_dir" 2>/dev/null || true
+        [ ! -f "$target_dir/libopenh264.so.8" ] && cp -f "$H264_SRC" "$target_dir/libopenh264.so.8" 2>/dev/null || true
+        ln -sf "libopenh264.so.8" "$target_dir/libopenh264.so.2.6.0" 2>/dev/null || true
+        ln -sf "libopenh264.so.8" "$target_dir/libopenh264.so" 2>/dev/null || true
+        chmod 755 "$target_dir"/libopenh264* 2>/dev/null || true
+    done
+    echo "✓ Codecs vidéo Cisco OpenH264 déployés dans ~/.local/lib"
+fi
+
 # ------------------------------------------------------------------------------
 # 10. Déploiement de l'Extension GNOME Shell Hanabi (Vidéo native Mutter)
 # ------------------------------------------------------------------------------

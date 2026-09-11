@@ -189,13 +189,28 @@ class WallpaperManager:
         return hist[0] if hist else None
 
     def restore_last_wallpaper(self) -> bool:
-        """Restaure et applique automatiquement le dernier fond d'écran actif depuis la base de données."""
+        """Restaure et applique automatiquement le dernier fond d'écran actif."""
         try:
+            # 1. Vérifier si current_wallpaper.json contient un fond d'écran actif valide
+            state_file = Path.home() / ".config/wallpapermaison/current_wallpaper.json"
+            if state_file.exists():
+                try:
+                    import json
+                    data = json.loads(state_file.read_text(encoding="utf-8"))
+                    p = data.get("path")
+                    if p and os.path.exists(p):
+                        logger.info("Restauration automatique depuis current_wallpaper.json: %s", p)
+                        return self.apply_wallpaper_by_path(p)
+                except Exception:
+                    pass
+
+            # 2. Vérifier l'historique en base de données
             hist = db.get_history(limit=1)
-            if hist and len(hist) > 0 and "wallpaper_id" in hist[0]:
-                wp_id = hist[0]["wallpaper_id"]
-                logger.info("Restauration automatique du fond d'écran précédent (ID: %s)", wp_id)
-                return self.apply_wallpaper(wp_id)
+            if hist and len(hist) > 0:
+                wp_id = hist[0].get("id") or hist[0].get("wallpaper_id")
+                if wp_id:
+                    logger.info("Restauration automatique du fond d'écran précédent (ID: %s)", wp_id)
+                    return self.apply_wallpaper(wp_id)
 
             wps = db.get_wallpapers(limit=1)
             if wps and len(wps) > 0:
@@ -206,29 +221,25 @@ class WallpaperManager:
             logger.error("Erreur lors de la restauration du fond d'écran: %s", e)
         return False
 
+    def apply_wallpaper_by_path(self, file_path: str, monitor: str = "all") -> bool:
+        """Importe et applique directement un fond d'écran à partir de son chemin de fichier."""
+        p = Path(file_path).expanduser().resolve()
+        if not p.exists():
+            logger.error("Fichier introuvable pour application directe: %s", file_path)
+            return False
+        from app.media.scanner import media_scanner
+        imported = media_scanner.import_single_file(str(p))
+        if imported and "id" in imported:
+            return self.apply_wallpaper(imported["id"], monitor=monitor)
+        return False
+
     def _sync_vscode(self, video_path: str) -> None:
         """Synchronise automatiquement le live wallpaper avec Visual Studio Code."""
         try:
-            dl_dir = Path.home() / "reseau/Perso/Téléchargements"
-            if not dl_dir.exists():
-                dl_dir = Path.home() / "Téléchargements"
-                if not dl_dir.exists():
-                    dl_dir = Path.home() / "Downloads"
-            if dl_dir.exists():
-                link = dl_dir / "wallpaper.mp4"
-                if link.is_symlink() or link.exists():
-                    link.unlink()
-                link.symlink_to(video_path)
+            from app.automation.vscode_sync import vscode_sync
+            vscode_sync.publish_state(video_path, media_type="video", source="desktop")
         except Exception as e:
-            logger.debug("Impossible de mettre à jour le lien wallpaper.mp4: %s", e)
-
-        try:
-            patch_script = Path(__file__).resolve().parents[2] / "scripts/patch_vscode_html.py"
-            if patch_script.exists():
-                subprocess.run([sys.executable, str(patch_script), str(video_path)],
-                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
-        except Exception as e:
-            logger.debug("Erreur patch HTML VS Code: %s", e)
+            logger.debug("Erreur synchronisation VS Code via vscode_sync: %s", e)
 
     def get_engines_status(self) -> List[Dict[str, Any]]:
         """Retourne la liste des moteurs et leur statut pour les paramètres."""

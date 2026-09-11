@@ -23,6 +23,23 @@ class WallpaperBridge {
      * Détecte automatiquement le fond d'écran actif de la session ou de WallpaperMaison.
      */
     static detectCurrentWallpaper() {
+        // 0. Détection prioritaire via current_wallpaper.json (WallpaperMaison actif)
+        try {
+            const home = this.getHomeDir();
+            const candidates = [
+                node_path.join(home, '.config/wallpapermaison/current_wallpaper.json'),
+                node_path.join(home, 'reseau/Perso/.config/wallpapermaison/current_wallpaper.json')
+            ];
+            for (const c of candidates) {
+                if (node_fs.existsSync(c)) {
+                    const data = JSON.parse(node_fs.readFileSync(c, 'utf8'));
+                    if (data && data.path && node_fs.existsSync(data.path)) {
+                        return data.path;
+                    }
+                }
+            }
+        } catch {}
+
         // 1. Détection via GSettings GNOME (méthode native instantanée)
         try {
             const out = node_child_process.execFileSync('gsettings', ['get', 'org.gnome.desktop.background', 'picture-uri'], {

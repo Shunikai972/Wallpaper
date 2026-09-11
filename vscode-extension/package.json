@@ -26,7 +26,11 @@
 		"mp4"
 	],
 	"activationEvents": [
-		"onStartupFinished"
+		"onStartupFinished",
+		"onView:wallpaper-view",
+		"onView:sudo-root-view",
+		"onCommand:liveWallpaper.chooseWallpaper",
+		"onCommand:liveWallpaper.openSudoTerminal"
 	],
 	"extensionKind": [
 		"ui"
@@ -95,6 +99,12 @@
 				"title": "Clear Dynamic Theme Colors"
 			},
 			{
+				"command": "liveWallpaper.chooseWallpaper",
+				"category": "Live Wallpaper",
+				"title": "🖼️ Choisir un nouveau Wallpaper (Bureau & VS Code)",
+				"icon": "$(file-media)"
+			},
+			{
 				"command": "liveWallpaper.openSudoTerminal",
 				"category": "⚡ Sudo Root",
 				"title": "⚡ Terminal Sudo Root",
@@ -144,6 +154,11 @@
 		"viewsContainers": {
 			"activitybar": [
 				{
+					"id": "wallpaper-container",
+					"title": "🖼️ Wallpaper",
+					"icon": "wallpaper-icon.svg"
+				},
+				{
 					"id": "sudo-root-container",
 					"title": "⚡ Sudo Root",
 					"icon": "sudo-icon.svg"
@@ -151,6 +166,13 @@
 			]
 		},
 		"views": {
+			"wallpaper-container": [
+				{
+					"id": "wallpaper-view",
+					"name": "Changer le Fond d'Écran",
+					"type": "webview"
+				}
+			],
 			"sudo-root-container": [
 				{
 					"id": "sudo-root-view",

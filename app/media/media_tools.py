@@ -28,6 +28,21 @@ def get_mpv_command() -> List[str]:
             pass
     return ["mpv"]
 
+def get_media_env() -> Dict[str, str]:
+    """Retourne l'environnement d'exécution avec les bibliothèques de codecs (OpenH264)."""
+    env = dict(os.environ)
+    home = Path.home()
+    extra_dirs = [
+        str(home / ".local/lib"),
+        str(home / "reseau/Perso/.local/lib"),
+        str(Path(__file__).resolve().parents[2] / "gnome-extension/hanabi-extension@jeffshee.github.io/lib"),
+    ]
+    valid_dirs = [d for d in extra_dirs if os.path.isdir(d)]
+    if valid_dirs:
+        current_ld = env.get("LD_LIBRARY_PATH", "")
+        env["LD_LIBRARY_PATH"] = ":".join(valid_dirs) + (f":{current_ld}" if current_ld else "")
+    return env
+
 def run_ffmpeg(cmd_args: List[str], timeout: int = 10) -> bool:
     """Exécute ffmpeg avec repli automatique sur le flatpak MPV officiel si le ffmpeg système manque de codecs."""
     # 1. Tentative native
@@ -38,7 +53,8 @@ def run_ffmpeg(cmd_args: List[str], timeout: int = 10) -> bool:
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,
                 timeout=timeout,
-                check=False
+                check=False,
+                env=get_media_env()
             )
             if res.returncode == 0:
                 return True
@@ -65,7 +81,13 @@ def run_ffprobe_json(file_path: Path, timeout: int = 10) -> Optional[Dict[str, A
     # 1. Tentative native
     if shutil.which("ffprobe"):
         try:
-            out = subprocess.check_output(["ffprobe"] + common_args, stderr=subprocess.DEVNULL, text=True, timeout=timeout)
+            out = subprocess.check_output(
+                ["ffprobe"] + common_args,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                timeout=timeout,
+                env=get_media_env()
+            )
             data = json.loads(out)
             if data and ("format" in data or "streams" in data):
                 return data

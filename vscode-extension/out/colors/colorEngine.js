@@ -182,9 +182,17 @@ class ColorEngine {
         }
     }
 
+    get themeSync() {
+        return this.synchronizer;
+    }
+
     async forceExtractNow() {
         this.log("Extraction manuelle immédiate demandée...");
         await this.processFrame(true);
+    }
+
+    async extractCurrentColors() {
+        return this.forceExtractNow();
     }
 
     async reset() {

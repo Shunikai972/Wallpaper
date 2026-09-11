@@ -23,8 +23,50 @@ if [ -d "${HOME}/reseau/Perso" ]; then
     [ ! -e "${HOME}/.cache/wallpapermaison" ] && ln -sfn "${P_CACHE}" "${HOME}/.cache/wallpapermaison" 2>/dev/null || true
 fi
 
-# Auto-guérison et déploiement de root-shell et du lanceur VS Code
-mkdir -p "${HOME}/.local/bin" "${HOME}/.local/share/applications" 2>/dev/null || true
+# Auto-guérison et déploiement des codecs vidéo (OpenH264 officiel Cisco pour décodage H.264)
+LIB_PERSIST="${HOME}/reseau/Perso/.local/lib"
+LIB_LOCAL="${HOME}/.local/lib"
+mkdir -p "${LIB_LOCAL}" "${LIB_PERSIST}" 2>/dev/null || true
+H264_SRC=""
+for cand in \
+    "${SCRIPT_DIR}/gnome-extension/hanabi-extension@jeffshee.github.io/lib/libopenh264.so.8" \
+    "${SCRIPT_DIR}/lib/libopenh264.so.8" \
+    "${LIB_PERSIST}/libopenh264.so.8" \
+    "${LIB_LOCAL}/libopenh264.so.8"; do
+    if [ -f "$cand" ]; then
+        H264_SRC="$cand"
+        break
+    fi
+done
+
+if [ -z "$H264_SRC" ]; then
+    if command -v curl &>/dev/null && command -v bzip2 &>/dev/null; then
+        mkdir -p "${LIB_LOCAL}" "${SCRIPT_DIR}/gnome-extension/hanabi-extension@jeffshee.github.io/lib" 2>/dev/null || true
+        curl -sL "http://ciscobinary.openh264.org/libopenh264-2.6.0-linux64.8.so.bz2" | bzip2 -d > "${LIB_LOCAL}/libopenh264.so.8" 2>/dev/null || true
+        if [ -s "${LIB_LOCAL}/libopenh264.so.8" ]; then
+            chmod 755 "${LIB_LOCAL}/libopenh264.so.8"
+            H264_SRC="${LIB_LOCAL}/libopenh264.so.8"
+        fi
+    fi
+fi
+
+if [ -n "$H264_SRC" ] && [ -f "$H264_SRC" ]; then
+    for target_dir in "${LIB_LOCAL}" "${LIB_PERSIST}" "${SCRIPT_DIR}/gnome-extension/hanabi-extension@jeffshee.github.io/lib"; do
+        mkdir -p "$target_dir" 2>/dev/null || true
+        if [ ! -f "$target_dir/libopenh264.so.8" ]; then
+            cp -f "$H264_SRC" "$target_dir/libopenh264.so.8" 2>/dev/null || true
+        fi
+        ln -sf "libopenh264.so.8" "$target_dir/libopenh264.so.2.6.0" 2>/dev/null || true
+        ln -sf "libopenh264.so.8" "$target_dir/libopenh264.so" 2>/dev/null || true
+        chmod 755 "$target_dir"/libopenh264* 2>/dev/null || true
+    done
+fi
+
+# Auto-guérison et déploiement de root-shell, lanceur VS Code et autostart
+mkdir -p "${HOME}/.local/bin" "${HOME}/.local/share/applications" "${HOME}/.config/autostart" 2>/dev/null || true
+if [ ! -f "${HOME}/.config/autostart/wallpapermaison.desktop" ] && [ -f "${SCRIPT_DIR}/scripts/autostart.desktop" ]; then
+    cp -f "${SCRIPT_DIR}/scripts/autostart.desktop" "${HOME}/.config/autostart/wallpapermaison.desktop" 2>/dev/null || true
+fi
 if [ -f "${SCRIPT_DIR}/scripts/root-shell" ]; then
     cp -f "${SCRIPT_DIR}/scripts/root-shell" "${HOME}/.local/bin/root-shell" 2>/dev/null || true
     chmod +x "${HOME}/.local/bin/root-shell" 2>/dev/null || true
@@ -92,10 +134,15 @@ else
 fi
 
 # Export des variables d'environnement nécessaires
+export LD_LIBRARY_PATH="${HOME}/.local/lib:${HOME}/reseau/Perso/.local/lib:${SCRIPT_DIR}/gnome-extension/hanabi-extension@jeffshee.github.io/lib:${LD_LIBRARY_PATH:-}"
 export XDG_DATA_DIRS="${HOME}/.local/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
 export PATH="${HOME}/.local/bin:${SCRIPT_DIR}/scripts:${PATH}"
 export PYTHONPATH="${SCRIPT_DIR}:${PYTHONPATH}"
 export PYSTRAY_BACKEND="${PYSTRAY_BACKEND:-xorg}"
+
+if command -v systemctl &>/dev/null; then
+    systemctl --user set-environment LD_LIBRARY_PATH="${LD_LIBRARY_PATH}" 2>/dev/null || true
+fi
 
 # Attente active de la session graphique si lancé au démarrage ou en mode démon
 IS_DAEMON=false

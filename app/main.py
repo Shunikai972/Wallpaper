@@ -22,6 +22,8 @@ from app import __version__, __app_name__
 from app.api.bridge import AppBridge
 from app.automation.rules import rule_engine
 from app.automation.scheduler import scheduler
+from app.automation.env_checker import env_checker
+from app.automation.vscode_sync import vscode_sync
 from app.core.config import config_manager, LOGS_DIR
 from app.core.logger import setup_logger
 from app.storage.database import db
@@ -68,6 +70,8 @@ class Application:
         power_monitor.start()
         window_monitor.start()
         rule_engine.start()
+        vscode_sync.start()
+        env_checker.start()
 
         if config_manager.get("auto_change.enabled", False):
             scheduler.start()
@@ -159,6 +163,8 @@ class Application:
         self._shutdown_event.set()
 
         try:
+            vscode_sync.stop()
+            env_checker.stop()
             scheduler.stop()
             rule_engine.stop()
             power_monitor.stop()
