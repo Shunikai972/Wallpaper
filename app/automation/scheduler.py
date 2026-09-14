@@ -1,9 +1,10 @@
-"""Planificateur de rotation automatique des fonds d'écran."""
-
+import json
 import logging
+import os
 import random
 import threading
 import time
+from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 from app.core.config import config_manager
@@ -25,6 +26,69 @@ class WallpaperScheduler:
         self._history_stack: List[int] = []
         self._history_index = -1
 
+    def _get_rotation_config(self) -> Dict[str, Any]:
+        """Charge les réglages de rotation automatique depuis rotation_settings.json ou .env."""
+        res = {
+            "enabled": config_manager.get("auto_change.enabled", False),
+            "interval_seconds": config_manager.get("auto_change.interval_seconds", 300),
+            "folder": "",
+            "order": config_manager.get("auto_change.mode", "random")
+        }
+        # 1. Lecture des fichiers de configuration JSON
+        for sp in [
+            Path.home() / ".config/wallpapermaison/rotation_settings.json",
+            Path.home() / "reseau/Perso/.config/wallpapermaison/rotation_settings.json"
+        ]:
+            if sp.exists():
+                try:
+                    data = json.loads(sp.read_text(encoding="utf-8"))
+                    if isinstance(data, dict):
+                        if "enabled" in data:
+                            res["enabled"] = bool(data["enabled"])
+                        if "intervalMinutes" in data and isinstance(data["intervalMinutes"], (int, float)):
+                            res["interval_seconds"] = max(10, int(data["intervalMinutes"] * 60))
+                        elif "interval_minutes" in data and isinstance(data["interval_minutes"], (int, float)):
+                            res["interval_seconds"] = max(10, int(data["interval_minutes"] * 60))
+                        if data.get("folder") and os.path.isdir(str(data["folder"])):
+                            res["folder"] = str(data["folder"])
+                        if data.get("order"):
+                            res["order"] = str(data["order"])
+                        break
+                except Exception:
+                    pass
+
+        # 2. Compléter / Surcharger via .env
+        for ep in [
+            Path(__file__).resolve().parents[2] / ".env",
+            Path.home() / "reseau/Perso/Bureau/Wallpaper/.env",
+            Path.home() / "Bureau/Wallpaper/.env"
+        ]:
+            if ep.exists():
+                try:
+                    for line in ep.read_text(encoding="utf-8").splitlines():
+                        line = line.strip()
+                        if not line or line.startswith("#") or "=" not in line:
+                            continue
+                        k, v = line.split("=", 1)
+                        k = k.strip().upper()
+                        v = v.strip().strip("'\"")
+                        if k == "ROTATION_ENABLED":
+                            res["enabled"] = v.lower() in ("true", "1", "yes")
+                        elif k == "ROTATION_INTERVAL_MINUTES":
+                            try:
+                                res["interval_seconds"] = max(10, int(float(v) * 60))
+                            except ValueError:
+                                pass
+                        elif k == "ROTATION_FOLDER" and os.path.isdir(v):
+                            res["folder"] = v
+                        elif k == "ROTATION_ORDER":
+                            res["order"] = v.lower()
+                    break
+                except Exception:
+                    pass
+
+        return res
+
     def is_running(self) -> bool:
         return self._running
 
@@ -32,7 +96,8 @@ class WallpaperScheduler:
         """Retourne le nombre de secondes avant le prochain changement."""
         if not self._running:
             return 0
-        interval = config_manager.get("auto_change.interval_seconds", 300)
+        cfg = self._get_rotation_config()
+        interval = cfg.get("interval_seconds", 300)
         elapsed = time.time() - self._last_change_time
         return max(0, int(interval - elapsed))
 
@@ -61,7 +126,20 @@ class WallpaperScheduler:
             if not self._running:
                 break
 
-            interval = config_manager.get("auto_change.interval_seconds", 300)
+            cfg = self._get_rotation_config()
+            interval = cfg.get("interval_seconds", 300)
+
+            # Vérifier si VS Code ou un autre processus a appliqué un wallpaper récemment
+            state_file = Path.home() / ".config/wallpapermaison/current_wallpaper.json"
+            if state_file.exists():
+                try:
+                    data = json.loads(state_file.read_text(encoding="utf-8"))
+                    ts = float(data.get("timestamp", 0))
+                    if ts > self._last_change_time:
+                        self._last_change_time = ts
+                except Exception:
+                    pass
+
             elapsed = time.time() - self._last_change_time
 
             if elapsed >= interval:
@@ -93,21 +171,59 @@ class WallpaperScheduler:
 
     def next_wallpaper(self) -> bool:
         """Passe au fond d'écran suivant selon la stratégie active."""
+        cfg = self._get_rotation_config()
+        folder = cfg.get("folder")
+        order = cfg.get("order", "random")
+        if order == "sequential":
+            order = "order"
+
+        # 1. Si un dossier spécifique est configuré pour la rotation
+        if folder and os.path.isdir(folder):
+            valid_exts = {".mp4", ".webm", ".mkv", ".mov", ".png", ".jpg", ".jpeg", ".webp", ".gif"}
+            folder_files = []
+            try:
+                for entry in os.scandir(folder):
+                    if (entry.is_file() or entry.is_symlink()) and not entry.name.startswith(".") and not entry.name.endswith(".part") and entry.name != "wallpaper.mp4":
+                        ext = os.path.splitext(entry.name)[1].lower()
+                        if ext in valid_exts:
+                            folder_files.append(entry.path)
+            except Exception as e:
+                logger.warning("Erreur scan dossier rotation %s: %s", folder, e)
+
+            if folder_files:
+                folder_files.sort()
+                cur = wallpaper_manager.get_current_wallpaper()
+                cur_path = cur.get("file_path", "") if cur else ""
+                chosen_path = None
+                if order == "random":
+                    pool = [p for p in folder_files if p != cur_path] or folder_files
+                    chosen_path = random.choice(pool)
+                else:
+                    if cur_path in folder_files:
+                        idx = folder_files.index(cur_path)
+                        chosen_path = folder_files[(idx + 1) % len(folder_files)]
+                    else:
+                        chosen_path = folder_files[0]
+
+                if chosen_path:
+                    self._last_change_time = time.time()
+                    return wallpaper_manager.apply_wallpaper_by_path(chosen_path)
+
+        # 2. Fallback sur la bibliothèque de base de données
         items = self._get_eligible_wallpapers()
         if not items:
             logger.warning("Aucun fond d'écran éligible pour le changement automatique.")
             return False
 
-        mode = config_manager.get("auto_change.mode", "order")
         item_ids = [item["id"] for item in items]
         next_id: Optional[int] = None
 
         # Mode aléatoire pur
-        if mode == "random":
+        if order == "random":
             next_id = random.choice(item_ids)
 
         # Mode aléatoire sans répétition
-        elif mode == "random_no_repeat":
+        elif order == "random_no_repeat":
             with self._lock:
                 if not self._unseen_pool:
                     self._unseen_pool = list(item_ids)
@@ -142,3 +258,4 @@ class WallpaperScheduler:
         return False
 
 scheduler = WallpaperScheduler()
+

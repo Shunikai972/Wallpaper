@@ -323,6 +323,38 @@ Le projet intègre une version améliorée, robuste et hautement paramétrable d
 
 ---
 
+### 🔄 Rotation Automatique Multi-Postes (Interface VS Code & `.env`)
+
+WallpaperMaison intègre un moteur de rotation automatique complet, accessible à la fois directement depuis le tableau de bord de la vue latérale VS Code (`Live Wallpaper` dans la barre d'activités) et configurable via votre fichier `.env`.
+
+#### 🎨 Fonctionnalités de l'Interface VS Code
+* **Switch d'activation animé** façon iOS avec voyant de statut en direct.
+* **Compte à rebours dynamique** (`MM:SS`) indiquant exactement le temps restant avant le prochain changement.
+* **Bouton d'action rapide `⏭️ Suivant`** pour changer immédiatement de fond d'écran sans attendre l'expiration du minuteur.
+* **Sélecteur de dossier intuitif** avec boutons d'accès rapide (Dossier Téléchargements, Images, etc.) et détection en direct du nombre de médias disponibles (compteurs séparés pour vidéos et images).
+* **Réglage du délai de rotation** :
+  * Sélection par puces rapides : **1m**, **3m**, **5m**, **10m**, **15m**, **30m**, **60m**.
+  * Molette numérique pour un intervalle personnalisé en minutes.
+* **Mode d'ordonnancement** :
+  * `🎲 Aléatoire` : Pioche aléatoire sans répétition immédiate.
+  * `🔁 Dans l'ordre` : Rotation séquentielle alphabétique à travers le dossier.
+
+#### 💾 Persistance Cross-Postes (Réseau Perso NFS)
+Les réglages sont sauvegardés simultanément dans :
+1. `~/.config/wallpapermaison/rotation_settings.json`
+2. `~/reseau/Perso/.config/wallpapermaison/rotation_settings.json` *(accessible depuis n'importe quel poste)*
+3. Le fichier `.env` à la racine du projet (`ROTATION_ENABLED`, `ROTATION_INTERVAL_MINUTES`, `ROTATION_FOLDER`, `ROTATION_ORDER`).
+
+#### ⚡ Configuration alternative via `.env`
+```env
+ROTATION_ENABLED=true
+ROTATION_INTERVAL_MINUTES=5
+ROTATION_FOLDER=/var/home/E256190S/reseau/Perso/Téléchargements
+ROTATION_ORDER=random
+```
+
+---
+
 ## ⚠️ Limites Connues & Solutions de Contournement
 
 ### 1. Système de fichiers en lecture seule (`EROFS: read-only file system`)

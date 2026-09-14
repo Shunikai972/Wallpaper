@@ -244,7 +244,50 @@ Lors de la connexion à un nouveau poste de travail Linux Fedora :
 
 ---
 
-## 11. Synthèse des composants modifiés et validés
+## 11. Fonctionnalité : Rotation Automatique Multi-Postes Paramétrable dans VS Code et `.env`
+
+### 11.1 Expression du besoin
+- Pouvoir déclencher le changement automatique de fond d'écran toutes les $X$ minutes (configurable via une interface graphique soignée dans VS Code ou via le fichier `.env`).
+- Définir un dossier source dédié contenant des médias compatibles (vidéos MP4, WebM, MKV ou images PNG, JPG, WebP, GIF).
+- Proposer deux modes de défilement : Aléatoire (`random`) ou Dans l'ordre (`sequential`).
+- **Garantir la persistance intégrale des réglages quel que soit le poste de travail de démarrage** (support des sessions volatiles Fedora Silverblue sur réseau NFS `~/reseau/Perso`).
+- Fournir une interface soignée en verre dépoli (glassmorphism) dans le panneau latéral VS Code avec retour visuel en temps réel (compte à rebours dynamique, compteurs de médias, boutons de présélection, etc.).
+
+### 11.2 Architecture et composants développés
+
+1. **Module `RotationManager` (`vscode-extension/out/rotationManager.js`)** :
+   - Gestionnaire d'état réactif avec compte à rebours précis à la seconde (`formatTimeRemaining`).
+   - Algorithme d'ordonnancement intelligent :
+     - Mode `random` : tirage aléatoire évitant de rejouer le fond d'écran actif.
+     - Mode `sequential` : parcours ordonné alphabétique avec indexation persistante.
+   - Balayage dynamique des dossiers pour filtrer et dénombrer les médias compatibles (`mp4`, `webm`, `mkv`, `mov`, `png`, `jpg`, `jpeg`, `webp`, `gif`).
+   - Déclenchement transparent de la synchronisation Bureau (GNOME/Hanabi) et VS Code (DOM hot-swap) lors de chaque bascule.
+
+2. **Stratégie de persistance multi-postes** :
+   - Les réglages sont écrits en double miroir :
+     - `~/.config/wallpapermaison/rotation_settings.json` (machine locale)
+     - `~/reseau/Perso/.config/wallpapermaison/rotation_settings.json` (partage persistant NFS accessible depuis tous les postes de travail)
+   - Synchronisation bidirectionnelle automatique avec les variables d'environnement dans `.env` :
+     - `ROTATION_ENABLED=true|false`
+     - `ROTATION_INTERVAL_MINUTES=5`
+     - `ROTATION_FOLDER=/var/home/E256190S/reseau/Perso/Téléchargements`
+     - `ROTATION_ORDER=random|sequential`
+
+3. **Interface utilisateur VS Code (Panneau `wallpaper-view`)** :
+   - Carte de statut avec média courant, format et chemin complet.
+   - Switch interactif iOS avec indicateur lumineux pulsé.
+   - Compte à rebours dynamique `MM:SS` rafraîchi en temps réel.
+   - Sélecteur de dossiers avec boutons rapides (Téléchargements, Wallpapers) et boîte de dialogue native VS Code.
+   - Sélecteur de délai avec puces d'accès rapide (`1m`, `3m`, `5m`, `10m`, `15m`, `30m`, `60m`) et champ numérique personnalisé.
+   - Commutateur de mode `🎲 Aléatoire` / `🔁 Dans l'ordre`.
+   - Bouton de saut immédiat `⏭️ Suivant` pour forcer la rotation à la demande.
+
+4. **Compatibilité Python (`app/automation/scheduler.py`)** :
+   - Le démon Python intègre également la lecture de `rotation_settings.json` et des variables `.env`, assurant la cohérence même si VS Code n'est pas lancé.
+
+---
+
+## 12. Synthèse des composants modifiés et validés
 
 | Composant | Fichier | Rôle de la correction |
 | :--- | :--- | :--- |
@@ -252,9 +295,11 @@ Lors de la connexion à un nouveau poste de travail Linux Fedora :
 | **Sync Daemon** | `app/automation/vscode_sync.py` | Empêcher l'écho inverse et publier immédiatement les fichiers `live_state` pour hot-swap. |
 | **Launcher** | `scripts/code-launcher.sh` | Retirer le montage de `preload.js` pour éviter les crashs Electron sandbox. |
 | **Patch HTML** | `scripts/patch_vscode_html.py` | Lecture vidéo fluide sans blocage (suppression de `load()` et pause), CSP étendu, et live sync watcher 800ms. |
-| **Extension VS Code** | `vscode-extension/out/extension.js` | Publication instantanée de `live_state`, suppression des popups de reload, notification temps réel. |
-| **Manifeste Extension** | `vscode-extension/package.json` | Priorisation de `sudo-root-container`, activation globale (`*`) et menus complets. |
+| **Extension VS Code** | `vscode-extension/out/extension.js` | Tableau de bord moderne complet, hot-swap instantané, commandes de rotation. |
+| **Gestionnaire Rotation** | `vscode-extension/out/rotationManager.js` | Moteur de timer réactif, sélection aléatoire/séquentielle, persistance duale JSON + `.env`. |
+| **Manifeste Extension** | `vscode-extension/package.json` | Commandes de rotation, activation globale (`*`) et menus complets. |
 | **GNOME Renderer** | `gnome-extension/.../renderer.js` | Élimination des black frames via `seek(0)` et correction syntaxe GJS (`exportStateToWallpaperMaison`). |
 | **Gestionnaire Principal** | `app/wallpaper/manager.py` | Restauration prioritaire du fond d'écran Hanabi réel lors du démarrage du démon. |
+| **Scheduler Python** | `app/automation/scheduler.py` | Support unifié de la configuration de rotation par dossier et délai. |
 
-L'ensemble des fonctionnalités (Live Wallpaper animé sans freeze, hot-swap instantané sans rechargement de fenêtre, synchronisation bidirectionnelle Bureau <-> VS Code sans réversion, boutons Terminal Admin Sudo Root, et compatibilité Fedora Silverblue) est désormais 100% opérationnel, fluide et stabilisé.
+L'ensemble des fonctionnalités (Live Wallpaper animé sans freeze, hot-swap instantané sans rechargement de fenêtre, synchronisation bidirectionnelle Bureau <-> VS Code sans réversion, boutons Terminal Admin Sudo Root, rotation automatique paramétrable avec compte à rebours, et persistance garantie sur tout poste Fedora Silverblue) est désormais 100% opérationnel, fluide et stabilisé.

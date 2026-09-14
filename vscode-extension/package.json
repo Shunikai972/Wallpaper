@@ -116,6 +116,24 @@
 				"category": "⚡ Sudo Root",
 				"title": "⚡ Split Terminal Sudo Root",
 				"icon": "$(split-horizontal)"
+			},
+			{
+				"command": "liveWallpaper.toggleRotation",
+				"category": "Live Wallpaper",
+				"title": "🔄 Activer / Désactiver la Rotation Automatique",
+				"icon": "$(sync)"
+			},
+			{
+				"command": "liveWallpaper.nextWallpaper",
+				"category": "Live Wallpaper",
+				"title": "⏭️ Fond d'Écran Suivant (Rotation)",
+				"icon": "$(chevron-right)"
+			},
+			{
+				"command": "liveWallpaper.chooseRotationFolder",
+				"category": "Live Wallpaper",
+				"title": "📂 Choisir le Dossier de Rotation",
+				"icon": "$(folder-opened)"
 			}
 		],
 		"menus": {
