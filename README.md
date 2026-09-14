@@ -219,7 +219,7 @@ wallpapermaison/
 
 | Environnement | Session | Images Statiques | GIFs Animés | Vidéos (MP4 / WebM) |
 |---|---|---|---|---|
-| **Fedora GNOME** (Défaut) | **Wayland** | `GSettings` (Natif) | `mpvpaper` / `swww` | `mpvpaper` |
+| **Fedora GNOME** (Défaut) | **Wayland** | `GSettings` (Natif) | `Hanabi (Mutter)` / `swww` | `Hanabi (Mutter)` / `mpvpaper` |
 | **Fedora KDE Plasma** | **Wayland** | `Plasma DBus` (Natif) | `mpvpaper` / `swww` | `mpvpaper` |
 | **Fedora KDE Plasma** | **X11** | `Plasma DBus` (Natif) | `xwinwrap + mpv` | `xwinwrap + mpv` |
 | **Sway / Hyprland** | **Wayland** | `swww` / `swaybg` | `swww` / `mpvpaper` | `mpvpaper` |
@@ -229,13 +229,18 @@ wallpapermaison/
 
 ## 🎬 Fonctionnement des Fonds Vidéos sous Linux Wayland
 
-Sur Fedora Wayland, les protocoles de sécurité interdisent l'injection arbitraire de fenêtres sur le bureau sans passer par les protocoles officiels des compositeurs.
+Sur Fedora Wayland, les protocoles de sécurité interdisent l'injection arbitraire de fenêtres sur le bureau sans passer par les protocoles officiels des compositeurs. WallpaperMaison s'adapte automatiquement à votre gestionnaire :
 
-1. **Le moteur `mpvpaper` :**
+1. **Le moteur GNOME Shell Hanabi (Natif Mutter / GStreamer) :**
+   - Intégration directe dans le compositeur Mutter via une extension GNOME Shell dédiée (`gnome-extension/`).
+   - Restitution ultra-fluide avec élimination totale des black frames via `seek(0)` continue.
+   - Synchronisation bidirectionnelle instantanée avec VS Code et GSettings sans boucle de rétroaction.
+   - Support complet des codecs H.264 grâce à la bibliothèque Cisco OpenH264 injectée de manière portable (`~/.local/lib/libopenh264.so.8`).
+2. **Le moteur `mpvpaper` (Layer-Shell) :**
    - Utilise le protocole `wlr-layer-shell` sous Wayland pour projeter la vidéo directement sur le plan d'arrière-plan du compositeur.
    - S'appuie sur `mpv` et le moteur d'accélération matérielle de votre carte graphique (`--hwdec=auto`, compatible Intel QuickSync, AMD VA-API et NVIDIA NVDEC).
    - Consommation processeur quasi-nulle (< 1% CPU sur machine moderne).
-2. **Mise en pause intelligente :**
+3. **Mise en pause intelligente :**
    - Le composant `window_monitor` surveille l'activité de vos fenêtres. Dès qu'un jeu (Steam, Proton, Lutris, etc.) ou une application plein écran est détecté, un signal `SIGSTOP` est envoyé au lecteur vidéo pour libérer immédiatement les ressources GPU.
    - Dès la fermeture du jeu ou le retour sur le bureau, un signal `SIGCONT` reprend la lecture instantanément à la même image.
 
@@ -337,6 +342,10 @@ Le projet intègre une version améliorée, robuste et hautement paramétrable d
 * **Problème rencontré** : Les sockets IPC Unix et fichiers de verrouillage placés dans `/tmp/` peuvent entrer en conflit d'UID sur des machines multi-utilisateurs.
 * **Solution apportée** : Tous les verrous applicatifs et sockets de communication du démon vidéo (`video_bg_worker.py`) utilisent désormais `$XDG_RUNTIME_DIR` (ex: `/run/user/26590/`), garantissant une isolation stricte et sécurisée par utilisateur.
 
+### 4. Conformité syntaxique ECMAScript sous GNOME GJS
+* **Problème rencontré** : Sous GNOME Shell 45 à 50+, GJS utilise le moteur SpiderMonkey strict. L'usage de déclarations de fonction classiques (`function foo()`) à l'intérieur du corps de classes ES6 dans les extensions GNOME provoque un rejet immédiat (`SyntaxError: unexpected token: identifier`) bloquant le sous-processus renderer.
+* **Solution apportée** : Portée modulaire standardisée pour les fonctions utilitaires exportées et méthodes de classe pures sans mots-clés parasites, assurant un chargement 100% robuste sur tout nouveau poste.
+
 ---
 
 ## 🧪 Exécution des Tests Automatisés
@@ -345,7 +354,7 @@ Le projet inclut une suite de tests unitaires couvrant l'ensemble des modules (y
 ```bash
 python -m unittest discover -s tests
 ```
-*Résultat attendu : `Ran 29 tests ... OK`*
+*Résultat attendu : `Ran 35 tests ... OK`*
 
 ---
 
