@@ -4,48 +4,94 @@
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
 from pathlib import Path
+from urllib.parse import quote
+
+def detect_current_video_path(preferred_path: str = None) -> str:
+    """Détecte avec certitude le fond d'écran vidéo actuellement actif sur le bureau."""
+    if preferred_path and Path(preferred_path).exists():
+        return str(Path(preferred_path).resolve())
+
+    # 1. Vérification GSettings Hanabi
+    if shutil.which("gsettings"):
+        try:
+            res = subprocess.run(
+                ["gsettings", "get", "io.github.jeffshee.hanabi-extension", "video-path"],
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=1
+            )
+            if res.returncode == 0:
+                val = res.stdout.strip().strip("'\"")
+                if val and Path(val).exists():
+                    return str(Path(val).resolve())
+        except Exception:
+            pass
+
+    # 2. Vérification fichier d'état WallpaperMaison
+    state_files = [
+        Path.home() / ".config/wallpapermaison/current_wallpaper.json",
+        Path.home() / "reseau/Perso/.config/wallpapermaison/current_wallpaper.json"
+    ]
+    for sf in state_files:
+        if sf.exists():
+            try:
+                st = json.loads(sf.read_text(encoding="utf-8"))
+                p = st.get("path")
+                if p and Path(p).exists():
+                    return str(Path(p).resolve())
+            except Exception:
+                pass
+
+    # 3. Vérification du symlink wallpaper.mp4
+    symlinks = [
+        Path.home() / "reseau/Perso/Téléchargements/wallpaper.mp4",
+        Path.home() / "Téléchargements/wallpaper.mp4"
+    ]
+    for sl in symlinks:
+        if sl.exists():
+            return str(sl.resolve())
+
+    # 4. Premier MP4 disponible
+    for dl_dir in [Path.home() / "reseau/Perso/Téléchargements", Path.home() / "Téléchargements"]:
+        if dl_dir.exists():
+            mp4s = list(dl_dir.glob("*.mp4"))
+            if mp4s:
+                return str(mp4s[0].resolve())
+
+    return str(Path.home() / "reseau/Perso/Téléchargements/wallpaper.mp4")
 
 def patch_workbench(video_path: str = None) -> bool:
     orig_path = Path("/usr/apps/VSCode-linux-x64/resources/app/out/vs/code/electron-browser/workbench/workbench.html")
     if not orig_path.exists():
         return False
 
-    state_file = Path.home() / ".config/wallpapermaison/current_wallpaper.json"
-    if not video_path:
-        if state_file.exists():
-            try:
-                st = json.loads(state_file.read_text(encoding="utf-8"))
-                video_path = st.get("path")
-            except Exception:
-                pass
-    if not video_path:
-        video_path = str(Path.home() / "reseau/Perso/Téléchargements/wallpaper.mp4")
+    resolved_video_path = detect_current_video_path(video_path)
 
     # Format vscode-file:// avec quote pour préserver les accents (ex: Téléchargements -> T%C3%A9l%C3%A9chargements)
-    from urllib.parse import quote
-    if not str(video_path).startswith("vscode-file://"):
-        resolved_path = Path(video_path).resolve()
-        quoted_path = quote(str(resolved_path), safe="/:@!$&'()*+,;=-_.~")
-        vsc_url = f"vscode-file://vscode-app{quoted_path}"
-    else:
-        vsc_url = str(video_path)
+    quoted_path = quote(str(resolved_video_path), safe="/:@!$&'()*+,;=-_.~")
+    vsc_url = f"vscode-file://vscode-app{quoted_path}"
 
-    user = os.environ.get("USER", "E256190S")
-    state_urls = [
-        f"vscode-file://vscode-app{quote(str(Path.home() / '.config/wallpapermaison/current_wallpaper.json'), safe='/:@!$&()*+,;=-_.~')}",
-        f"vscode-file://vscode-app{quote(str(Path.home() / 'reseau/Perso/.config/wallpapermaison/current_wallpaper.json'), safe='/:@!$&()*+,;=-_.~')}",
-        f"vscode-file://vscode-app/var/home/{user}/.config/wallpapermaison/current_wallpaper.json",
-        f"vscode-file://vscode-app/var/home/{user}/reseau/Perso/.config/wallpapermaison/current_wallpaper.json"
+    # Mise à jour cohérente de current_wallpaper.json
+    state_files = [
+        Path.home() / ".config/wallpapermaison/current_wallpaper.json",
+        Path.home() / "reseau/Perso/.config/wallpapermaison/current_wallpaper.json"
     ]
-    seen = set()
-    state_urls_dedup = []
-    for u in state_urls:
-        if u not in seen:
-            seen.add(u)
-            state_urls_dedup.append(u)
-    state_urls_json = json.dumps(state_urls_dedup)
+    import time
+    st_data = {
+        "path": resolved_video_path,
+        "media_type": "video",
+        "source": "desktop",
+        "timestamp": time.time()
+    }
+    for sf in state_files:
+        try:
+            sf.parent.mkdir(parents=True, exist_ok=True)
+            with open(sf, "w", encoding="utf-8") as f:
+                json.dump(st_data, f, indent=2)
+        except Exception:
+            pass
 
     content = orig_path.read_text(encoding="utf-8")
 
@@ -61,7 +107,7 @@ def patch_workbench(video_path: str = None) -> bool:
     content = re.sub(r"<!-- live-wallpaper-start.*?<!-- live-wallpaper-end -->\n?", "", content, flags=re.DOTALL)
 
     # 3. Injection CSS & JS
-    patch_code = f"""<!-- live-wallpaper-start live-wallpaper.ver.1.0.14 -->
+    patch_code = f"""<!-- live-wallpaper-start live-wallpaper.ver.99.0.0 -->
 <style id="live-wallpaper-injected-style">
     /* Suppression des alertes de corruption */
     .notification-toast-container:has([aria-label*="corrupt"]) {{ display: none !important; }}
@@ -93,8 +139,8 @@ def patch_workbench(video_path: str = None) -> bool:
         opacity: 0.75 !important;
     }}
 
-    /* Vidéo ou Image de fond : persistance absolue au-dessus des arrière-plans mais transparente */
-    #{'live-wallpaper-bg-video'}, #{'live-wallpaper-bg-img'} {{
+    /* Vidéo ou Image de fond : superposition transparente permanente */
+    #live-wallpaper-bg-video, #live-wallpaper-bg-img {{
         position: fixed !important;
         top: 0 !important;
         left: 0 !important;
@@ -160,7 +206,7 @@ def patch_workbench(video_path: str = None) -> bool:
         opacity: 1;
     }}
 
-    /* Bouton flottant temporaire de secours si la barre tarde à s'afficher */
+    /* Bouton de secours si la barre tarde à s'afficher */
     #vsc-sudo-action-btn-fallback {{
         position: fixed;
         bottom: 60px;
@@ -186,11 +232,10 @@ def patch_workbench(video_path: str = None) -> bool:
 
 <script>
 ;(function() {{
-    var STATE_URLS = {state_urls_json};
     var LW_VIDEO_ID = 'live-wallpaper-bg-video';
     var LW_IMG_ID = 'live-wallpaper-bg-img';
     var currentMediaSrc = {repr(vsc_url)};
-    var currentRawPath = {repr(str(video_path))};
+    var currentRawPath = {repr(str(resolved_video_path))};
 
     function isVideoSrc(src) {{
         if (!src) return true;
@@ -201,7 +246,8 @@ def patch_workbench(video_path: str = None) -> bool:
     function toVscUrl(p) {{
         if (!p) return '';
         if (p.startsWith('vscode-file://')) return p;
-        return 'vscode-file://vscode-app' + encodeURI(p);
+        var clean = p.startsWith('file://') ? p.slice(7) : p;
+        return 'vscode-file://vscode-app' + encodeURI(clean);
     }}
 
     function applyMedia(rawSrc) {{
@@ -210,7 +256,7 @@ def patch_workbench(video_path: str = None) -> bool:
         var oldVid = document.getElementById(LW_VIDEO_ID);
         var oldImg = document.getElementById(LW_IMG_ID);
 
-        if (currentMediaSrc === src && (oldVid || oldImg)) {{
+        if (currentRawPath === rawSrc && (oldVid || oldImg)) {{
             if (oldVid && oldVid.paused) oldVid.play().catch(function() {{}});
             return;
         }}
@@ -220,6 +266,19 @@ def patch_workbench(video_path: str = None) -> bool:
 
         if (oldVid) oldVid.remove();
         if (oldImg) oldImg.remove();
+
+        var commonStyle = [
+            'position: fixed !important',
+            'top: 0 !important',
+            'left: 0 !important',
+            'width: 100vw !important',
+            'height: 100vh !important',
+            'object-fit: cover !important',
+            'opacity: 0.35 !important',
+            'z-index: 999 !important',
+            'pointer-events: none !important',
+            'display: block !important'
+        ].join(';');
 
         if (isVideoSrc(src)) {{
             var video = document.createElement('video');
@@ -233,6 +292,9 @@ def patch_workbench(video_path: str = None) -> bool:
             video.setAttribute('playsinline', '');
             video.setAttribute('webkit-playsinline', '');
             video.setAttribute('muted', '');
+            video.setAttribute('autoplay', '');
+            video.setAttribute('loop', '');
+            video.style.cssText = commonStyle;
             video.onerror = function(e) {{
                 console.error("[WallpaperMaison] Erreur lecture vidéo:", e);
             }};
@@ -249,17 +311,35 @@ def patch_workbench(video_path: str = None) -> bool:
             var img = document.createElement('img');
             img.id = LW_IMG_ID;
             img.src = src;
+            img.style.cssText = commonStyle;
             document.body.appendChild(img);
         }}
     }}
 
     function ensureMedia() {{
+        // Synchronisation proactive avec l'état sur disque
+        if (window.vscode && typeof window.vscode.getWallpaperState === 'function') {{
+            try {{
+                var st = window.vscode.getWallpaperState();
+                if (st && st.path && st.path !== currentRawPath) {{
+                    applyMedia(st.path);
+                    return;
+                }}
+            }} catch(e) {{}}
+        }}
+
         var vid = document.getElementById(LW_VIDEO_ID);
         var img = document.getElementById(LW_IMG_ID);
         if (!vid && !img) {{
-            if (currentMediaSrc) applyMedia(currentMediaSrc);
-        }} else if (vid && vid.paused) {{
-            vid.play().catch(function() {{}});
+            if (currentRawPath) applyMedia(currentRawPath);
+            else if (currentMediaSrc) applyMedia(currentMediaSrc);
+        }} else if (vid) {{
+            if (!document.body.contains(vid)) {{
+                document.body.appendChild(vid);
+            }}
+            if (vid.paused) {{
+                vid.play().catch(function() {{}});
+            }}
         }}
     }}
 
@@ -366,55 +446,33 @@ def patch_workbench(video_path: str = None) -> bool:
                 if (!raw) return;
                 var data = typeof raw === 'string' ? JSON.parse(raw) : raw;
                 if (data && data.path) {{
-                    var target = toVscUrl(data.path);
-                    if (target !== currentMediaSrc) {{
-                        console.log("[WallpaperMaison] Synchronisation dynamique du fond:", target);
-                        applyMedia(target);
+                    if (data.path !== currentRawPath) {{
+                        console.log("[WallpaperMaison] Synchronisation dynamique du fond:", data.path);
+                        applyMedia(data.path);
                     }}
                 }}
             }} catch(e) {{}}
         }}
 
-        // 1. Écoute des messages
+        // 1. Écoute des messages (transmis par fs.watchFile dans preload.js)
         window.addEventListener('message', function(e) {{
             if (e && e.data && e.data.type === 'wallpapermaison:state') {{
                 applyState(e.data.data);
             }}
         }});
 
-        // 2. Sondage direct continu via fetch / XMLHttpRequest
-        function pollStateFiles() {{
-            for (var i = 0; i < STATE_URLS.length; i++) {{
-                (function(url) {{
-                    var u = url + '?_t=' + Date.now();
-                    if (typeof fetch === 'function') {{
-                        fetch(u, {{ cache: 'no-store' }})
-                            .then(function(res) {{
-                                if (res.ok) return res.json();
-                                throw new Error(res.status);
-                            }})
-                            .then(function(data) {{
-                                applyState(data);
-                            }})
-                            .catch(function() {{
-                                try {{
-                                    var xhr = new XMLHttpRequest();
-                                    xhr.open('GET', u, true);
-                                    xhr.onload = function() {{
-                                        if (xhr.status === 200 || xhr.status === 0) {{
-                                            applyState(xhr.responseText);
-                                        }}
-                                    }};
-                                    xhr.send();
-                                }} catch(e) {{}}
-                            }});
-                    }}
-                }})(STATE_URLS[i]);
-            }}
+        // 2. Sondage synchrone continu via getWallpaperState de preload.js
+        function pollSync() {{
+            try {{
+                if (window.vscode && typeof window.vscode.getWallpaperState === 'function') {{
+                    var st = window.vscode.getWallpaperState();
+                    if (st) applyState(st);
+                }}
+            }} catch(e) {{}}
         }}
 
-        setInterval(pollStateFiles, 200);
-        pollStateFiles();
+        setInterval(pollSync, 200);
+        pollSync();
     }}
 
     function init() {{
@@ -476,15 +534,38 @@ def patch_preload() -> bool:
         return False
 
     orig = orig_path.read_text(encoding="utf-8")
-    target = "f={ipcRenderer:{"
+    target = ",f={ipcRenderer:{"
+    helper_code = (
+        ';const _node_fs=require("fs"),_node_path=require("path");'
+        'function _getWallpaperState(){try{'
+        'const h=process.env.HOME||"/var/home/"+(process.env.USER||"E256190S");'
+        'for(const p of [_node_path.join(h,".config/wallpapermaison/current_wallpaper.json"),_node_path.join(h,"reseau/Perso/.config/wallpapermaison/current_wallpaper.json")]){'
+        'if(_node_fs.existsSync(p)){return JSON.parse(_node_fs.readFileSync(p,"utf8"));}'
+        '}}catch(e){}return null;}'
+        'try{const h=process.env.HOME||"/var/home/"+(process.env.USER||"E256190S");'
+        'const sf=_node_path.join(h,".config/wallpapermaison/current_wallpaper.json");'
+        'if(_node_fs.existsSync(sf)){_node_fs.watchFile(sf,{interval:200},(c,p)=>{try{'
+        'const d=JSON.parse(_node_fs.readFileSync(sf,"utf8"));'
+        'window.postMessage({type:"wallpapermaison:state",data:d},"*");'
+        '}catch(e){}})}}catch(e){}'
+        ';const f={'
+    )
     replacement = (
-        'f={runCommand(cmd,...args){r.emit("vscode:runAction",{},{id:cmd,from:"button",args:args})},'
+        helper_code +
+        'getWallpaperState(){return _getWallpaperState()},'
+        'runCommand(cmd,...args){r.emit("vscode:runAction",{},{id:cmd,from:"button",args:args})},'
         'ipcRenderer:{emit(e,...n){r.emit(e,...n)},'
     )
+
     if target in orig:
         patched = orig.replace(target, replacement)
     else:
-        patched = orig
+        # Fallback si f={ipcRenderer:{
+        target2 = "f={ipcRenderer:{"
+        if target2 in orig:
+            patched = orig.replace(target2, "f={getWallpaperState(){return _getWallpaperState()}," + replacement[len(helper_code)+3:])
+        else:
+            patched = orig
 
     targets = [
         Path.home() / "reseau/Perso/.config/wallpapermaison/vscode/preload.js",

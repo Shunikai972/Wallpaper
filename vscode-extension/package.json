@@ -26,6 +26,7 @@
 		"mp4"
 	],
 	"activationEvents": [
+		"*",
 		"onStartupFinished",
 		"onView:wallpaper-view",
 		"onView:sudo-root-view",
@@ -152,6 +153,16 @@
 					"group": "create@2"
 				}
 			],
+			"terminal/title": [
+				{
+					"command": "liveWallpaper.openSudoTerminal",
+					"group": "navigation@1"
+				},
+				{
+					"command": "liveWallpaper.splitSudoTerminal",
+					"group": "navigation@2"
+				}
+			],
 			"terminal/title/context": [
 				{
 					"command": "liveWallpaper.openSudoTerminal",
@@ -166,29 +177,29 @@
 		"viewsContainers": {
 			"activitybar": [
 				{
-					"id": "wallpaper-container",
-					"title": "🖼️ Wallpaper",
-					"icon": "wallpaper-icon.svg"
-				},
-				{
 					"id": "sudo-root-container",
 					"title": "⚡ Sudo Root",
 					"icon": "sudo-icon.svg"
+				},
+				{
+					"id": "wallpaper-container",
+					"title": "🖼️ Wallpaper",
+					"icon": "wallpaper-icon.svg"
 				}
 			]
 		},
 		"views": {
-			"wallpaper-container": [
-				{
-					"id": "wallpaper-view",
-					"name": "Changer le Fond d'Écran",
-					"type": "webview"
-				}
-			],
 			"sudo-root-container": [
 				{
 					"id": "sudo-root-view",
 					"name": "⚡ Terminal Root Administrateur",
+					"type": "webview"
+				}
+			],
+			"wallpaper-container": [
+				{
+					"id": "wallpaper-view",
+					"name": "Changer le Fond d'Écran",
 					"type": "webview"
 				}
 			]

@@ -360,21 +360,24 @@ EXT_SRC="${SCRIPT_DIR}/vscode-extension"
 
 if [ -d "$EXT_SRC" ]; then
     # Cible 1 : Emplacement personnalisé de l'extension
-    TARGET_VAR_TMP="/var/tmp/visual_extensions/budicuy.live-wallpaper-1.0.9"
+    TARGET_VAR_TMP="/var/tmp/visual_extensions/budicuy.live-wallpaper-99.0.0"
+    rm -rf "/var/tmp/visual_extensions/budicuy.live-wallpaper-1.0.9" 2>/dev/null || true
     if [ "$(realpath -m "$EXT_SRC")" != "$(realpath -m "$TARGET_VAR_TMP")" ]; then
         mkdir -p "$TARGET_VAR_TMP"
         cp -r "$EXT_SRC"/* "$TARGET_VAR_TMP/" 2>/dev/null || true
     fi
 
     # Cible 2 : Emplacement standard VS Code
-    TARGET_VSCODE_EXT="${HOME}/.vscode/extensions/budicuy.live-wallpaper-1.0.9"
+    TARGET_VSCODE_EXT="${HOME}/.vscode/extensions/budicuy.live-wallpaper-99.0.0"
+    rm -rf "${HOME}/.vscode/extensions/budicuy.live-wallpaper-1.0.9" 2>/dev/null || true
     if [ "$(realpath -m "$EXT_SRC")" != "$(realpath -m "$TARGET_VSCODE_EXT")" ]; then
         mkdir -p "$TARGET_VSCODE_EXT"
         cp -r "$EXT_SRC"/* "$TARGET_VSCODE_EXT/" 2>/dev/null || true
     fi
 
     if [ "$IS_PERSISTENT" = true ]; then
-        TARGET_NFS_EXT="${PERSISTENT_NFS}/.vscode/extensions/budicuy.live-wallpaper-1.0.9"
+        TARGET_NFS_EXT="${PERSISTENT_NFS}/.vscode/extensions/budicuy.live-wallpaper-99.0.0"
+        rm -rf "${PERSISTENT_NFS}/.vscode/extensions/budicuy.live-wallpaper-1.0.9" 2>/dev/null || true
         if [ "$(realpath -m "$EXT_SRC")" != "$(realpath -m "$TARGET_NFS_EXT")" ]; then
             mkdir -p "$TARGET_NFS_EXT"
             cp -r "$EXT_SRC"/* "$TARGET_NFS_EXT/" 2>/dev/null || true

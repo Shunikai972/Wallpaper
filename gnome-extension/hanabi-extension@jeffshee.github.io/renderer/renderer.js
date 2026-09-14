@@ -485,6 +485,30 @@ var HanabiRenderer = GObject.registerClass(
       this.dbus = Gio.DBusExportedObject.wrapJSObject(dbusXml, this);
       this.dbus.export(Gio.DBus.session, RENDERER_OBJECT_PATH);
     }
+function exportStateToWallpaperMaison(filePath) {
+  if (!filePath) return;
+  try {
+    const homeDir = GLib.get_home_dir();
+    const statePaths = [
+      GLib.build_filenamev([homeDir, ".config", "wallpapermaison", "current_wallpaper.json"]),
+      GLib.build_filenamev([homeDir, "reseau", "Perso", ".config", "wallpapermaison", "current_wallpaper.json"])
+    ];
+    const data = JSON.stringify({
+      path: filePath,
+      media_type: "video",
+      source: "desktop",
+      timestamp: Date.now() / 1000
+    }, null, 2);
+    for (const p of statePaths) {
+      try {
+        const dir = GLib.path_get_dirname(p);
+        GLib.mkdir_with_parents(dir, 0o755);
+        GLib.file_set_contents(p, data);
+      } catch(e) {}
+    }
+  } catch(e) {}
+}
+
     initWallpaperMaisonSync() {
       const homeDir = GLib.get_home_dir();
       const statePaths = [
@@ -508,7 +532,7 @@ var HanabiRenderer = GObject.registerClass(
                     lastTimestamp = ts;
                     if (data.path !== videoPath) {
                       console.log(`[WallpaperMaison] Synchronisation vidéo desktop: ${data.path}`);
-                      this.setFilePath(data.path);
+                      this.setFilePath(data.path, false);
                     }
                   }
                 }
@@ -555,12 +579,15 @@ var HanabiRenderer = GObject.registerClass(
         this.media.muted = _mute;
       }
     }
-    setFilePath(_videoPath) {
+    setFilePath(_videoPath, broadcast = true) {
       if (!_videoPath || _videoPath.trim() === "")
         return;
       if (_videoPath === videoPath && this.media && this.playing)
         return;
       videoPath = _videoPath;
+      if (broadcast) {
+        exportStateToWallpaperMaison(_videoPath);
+      }
       this.currentFile = Gio.File.new_for_path(_videoPath);
       if (this.play) {
         this.play.set_uri(this.currentFile.get_uri());

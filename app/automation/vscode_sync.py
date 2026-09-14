@@ -114,9 +114,55 @@ class VsCodeSync:
         except Exception as e:
             logger.error("Erreur écriture état partagé VS Code: %s", e)
 
+    def _get_hanabi_video_path(self) -> Optional[str]:
+        """Récupère le chemin vidéo actuellement configuré dans Hanabi GNOME Shell."""
+        import shutil
+        if not shutil.which("gsettings"):
+            return None
+        # Essai direct
+        try:
+            res = subprocess.run(
+                ["gsettings", "get", "io.github.jeffshee.hanabi-extension", "video-path"],
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=1
+            )
+            if res.returncode == 0:
+                val = res.stdout.strip().strip("'\"")
+                if val and os.path.exists(val):
+                    return val
+        except Exception:
+            pass
+        # Essai avec --schemadir
+        for s_dir in [
+            Path.home() / ".local/share/gnome-shell/extensions/hanabi-extension@jeffshee.github.io/schemas",
+            Path.home() / "reseau/Perso/.local/share/gnome-shell/extensions/hanabi-extension@jeffshee.github.io/schemas"
+        ]:
+            if s_dir.exists():
+                try:
+                    res = subprocess.run(
+                        ["gsettings", "--schemadir", str(s_dir), "get", "io.github.jeffshee.hanabi-extension", "video-path"],
+                        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=1
+                    )
+                    if res.returncode == 0:
+                        val = res.stdout.strip().strip("'\"")
+                        if val and os.path.exists(val):
+                            return val
+                except Exception:
+                    pass
+        return None
+
     def _watch_loop(self) -> None:
-        """Surveille le fichier current_wallpaper.json pour détecter les actions VS Code."""
+        """Surveille le fichier current_wallpaper.json et GSettings Hanabi pour synchronisation temps réel."""
         while not self._stop_event.is_set():
+            # 1. Vérification si Hanabi a changé de wallpaper directement sur le bureau
+            try:
+                hanabi_val = self._get_hanabi_video_path()
+                if hanabi_val and hanabi_val != self._last_written_path:
+                    logger.info("Changement de fond d'écran détecté depuis Hanabi bureau : %s", hanabi_val)
+                    self.publish_state(hanabi_val, media_type="video", source="desktop")
+            except Exception as e:
+                logger.debug("Erreur surveillance GSettings Hanabi: %s", e)
+
+            # 2. Surveillance du fichier d'état partagé current_wallpaper.json
             try:
                 if STATE_FILE.exists():
                     content = STATE_FILE.read_text(encoding="utf-8")

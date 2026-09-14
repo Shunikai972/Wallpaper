@@ -95,6 +95,7 @@ class LiveWallpaper {
         }
         if (event && event.affectsConfiguration('liveWallpaper.videoPath')) {
             await this.colorEngine.start();
+            await this.applyPatch();
             return;
         }
 

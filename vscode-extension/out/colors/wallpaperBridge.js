@@ -40,7 +40,19 @@ class WallpaperBridge {
             }
         } catch {}
 
-        // 1. Détection via GSettings GNOME (méthode native instantanée)
+        // 1. Détection via GSettings Hanabi (fond vidéo animé natif GNOME)
+        try {
+            const out = node_child_process.execFileSync('gsettings', ['get', 'io.github.jeffshee.hanabi-extension', 'video-path'], {
+                encoding: 'utf-8',
+                stdio: ['ignore', 'pipe', 'ignore']
+            }).trim();
+            const cleaned = out.replace(/^['"]/, '').replace(/['"]$/, '');
+            if (cleaned && node_fs.existsSync(cleaned)) {
+                return cleaned;
+            }
+        } catch {}
+
+        // 2. Détection via GSettings GNOME (image statique)
         try {
             const out = node_child_process.execFileSync('gsettings', ['get', 'org.gnome.desktop.background', 'picture-uri'], {
                 encoding: 'utf-8',

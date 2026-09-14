@@ -293,28 +293,39 @@ async function activate(context) {
         let lastSeenTimestamp = 0;
         const syncInterval = setInterval(() => {
             try {
+                let currentDetected = null;
                 if (fs.existsSync(stateFilePath)) {
                     const raw = fs.readFileSync(stateFilePath, 'utf8');
                     const data = JSON.parse(raw);
-                    if (data && data.timestamp > lastSeenTimestamp && data.path) {
-                        lastSeenTimestamp = data.timestamp;
-                        const curCfg = wallpaper.getRawConfig();
-                        if (curCfg.videoPath !== data.path) {
-                            wallpaper.updateConfig({ videoPath: data.path, enabled: true }).catch(() => {});
-                            if (wallpaper.colorEngine) {
-                                try {
-                                    if (typeof wallpaper.colorEngine.extractCurrentColors === 'function') {
-                                        wallpaper.colorEngine.extractCurrentColors().catch(() => {});
-                                    } else if (typeof wallpaper.colorEngine.forceExtractNow === 'function') {
-                                        wallpaper.colorEngine.forceExtractNow().catch(() => {});
-                                    }
-                                } catch (e) {}
-                            }
+                    if (data && data.path) {
+                        currentDetected = data.path;
+                    }
+                }
+                if (!currentDetected) {
+                    const { WallpaperBridge } = require('./colors/wallpaperBridge');
+                    currentDetected = WallpaperBridge.detectCurrentWallpaper();
+                }
+                if (currentDetected && fs.existsSync(currentDetected)) {
+                    const curCfg = wallpaper.getRawConfig();
+                    if (curCfg.videoPath !== currentDetected) {
+                        wallpaper.updateConfig({ videoPath: currentDetected, enabled: true }).catch(() => {});
+                        const patchScript = path.join(homeDir, 'reseau/Perso/Bureau/Wallpaper/scripts/patch_vscode_html.py');
+                        if (fs.existsSync(patchScript)) {
+                            require('child_process').spawn('python3', [patchScript, currentDetected], { detached: true, stdio: 'ignore' }).unref();
+                        }
+                        if (wallpaper.colorEngine) {
+                            try {
+                                if (typeof wallpaper.colorEngine.extractCurrentColors === 'function') {
+                                    wallpaper.colorEngine.extractCurrentColors().catch(() => {});
+                                } else if (typeof wallpaper.colorEngine.forceExtractNow === 'function') {
+                                    wallpaper.colorEngine.forceExtractNow().catch(() => {});
+                                }
+                            } catch (e) {}
                         }
                     }
                 }
             } catch (err) {}
-        }, 1500);
+        }, 1000);
         context.subscriptions.push({ dispose: () => clearInterval(syncInterval) });
     } catch (e) {}
 

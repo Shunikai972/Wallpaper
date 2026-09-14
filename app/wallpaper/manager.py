@@ -1,6 +1,8 @@
 """Gestionnaire central et orchestrateur des moteurs de fond d'écran."""
 
 import logging
+import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -191,7 +193,45 @@ class WallpaperManager:
     def restore_last_wallpaper(self) -> bool:
         """Restaure et applique automatiquement le dernier fond d'écran actif."""
         try:
-            # 1. Vérifier si current_wallpaper.json contient un fond d'écran actif valide
+            # 1. Vérifier Hanabi GSettings en priorité pour respecter le bureau actuel
+            if shutil.which("gsettings"):
+                hanabi_val = None
+                try:
+                    res = subprocess.run(
+                        ["gsettings", "get", "io.github.jeffshee.hanabi-extension", "video-path"],
+                        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=1
+                    )
+                    if res.returncode == 0:
+                        v = res.stdout.strip().strip("'\"")
+                        if v and os.path.exists(v):
+                            hanabi_val = v
+                except Exception:
+                    pass
+
+                if not hanabi_val:
+                    for s_dir in [
+                        Path.home() / ".local/share/gnome-shell/extensions/hanabi-extension@jeffshee.github.io/schemas",
+                        Path.home() / "reseau/Perso/.local/share/gnome-shell/extensions/hanabi-extension@jeffshee.github.io/schemas"
+                    ]:
+                        if s_dir.exists():
+                            try:
+                                res = subprocess.run(
+                                    ["gsettings", "--schemadir", str(s_dir), "get", "io.github.jeffshee.hanabi-extension", "video-path"],
+                                    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=1
+                                )
+                                if res.returncode == 0:
+                                    v = res.stdout.strip().strip("'\"")
+                                    if v and os.path.exists(v):
+                                        hanabi_val = v
+                                        break
+                            except Exception:
+                                pass
+
+                if hanabi_val:
+                    logger.info("Restauration depuis Hanabi GSettings bureau: %s", hanabi_val)
+                    return self.apply_wallpaper_by_path(hanabi_val)
+
+            # 2. Vérifier current_wallpaper.json
             state_file = Path.home() / ".config/wallpapermaison/current_wallpaper.json"
             if state_file.exists():
                 try:

@@ -95,9 +95,10 @@ fi
 # Synchronisation automatique de l'extension VS Code (locale + tmp)
 mkdir -p "${HOME}/.vscode/extensions" /var/tmp/visual_extensions 2>/dev/null || true
 if [ -d "${SCRIPT_DIR}/vscode-extension" ]; then
-    mkdir -p "${HOME}/.vscode/extensions/budicuy.live-wallpaper-1.0.9" /var/tmp/visual_extensions/budicuy.live-wallpaper-1.0.9 2>/dev/null || true
-    cp -rf "${SCRIPT_DIR}/vscode-extension"/* "${HOME}/.vscode/extensions/budicuy.live-wallpaper-1.0.9/" 2>/dev/null || true
-    cp -rf "${SCRIPT_DIR}/vscode-extension"/* "/var/tmp/visual_extensions/budicuy.live-wallpaper-1.0.9/" 2>/dev/null || true
+    rm -rf "${HOME}/.vscode/extensions/budicuy.live-wallpaper-1.0.9" /var/tmp/visual_extensions/budicuy.live-wallpaper-1.0.9 2>/dev/null || true
+    mkdir -p "${HOME}/.vscode/extensions/budicuy.live-wallpaper-99.0.0" /var/tmp/visual_extensions/budicuy.live-wallpaper-99.0.0 2>/dev/null || true
+    cp -rf "${SCRIPT_DIR}/vscode-extension"/* "${HOME}/.vscode/extensions/budicuy.live-wallpaper-99.0.0/" 2>/dev/null || true
+    cp -rf "${SCRIPT_DIR}/vscode-extension"/* "/var/tmp/visual_extensions/budicuy.live-wallpaper-99.0.0/" 2>/dev/null || true
     if [ -f "${SCRIPT_DIR}/scripts/register_extension.py" ]; then
         python3 "${SCRIPT_DIR}/scripts/register_extension.py" 2>/dev/null || true
     fi
