@@ -219,7 +219,32 @@ Lors du changement de fond d'écran (soit depuis le sélecteur VS Code, soit dep
 
 ---
 
-## 9. Synthèse des composants modifiés et validés
+## 10. Erreur de syntaxe GJS dans `renderer.js` (`SyntaxError: unexpected token: identifier`) empêchant l'affichage du fond d'écran GNOME
+
+### 10.1 Description du problème
+Lors de la connexion à un nouveau poste de travail Linux Fedora :
+- Le fond d'écran animé s'est correctement chargé dans Visual Studio Code (via `live_state.json` et le watcher webview).
+- En revanche, aucun fond d'écran animé n'apparaissait sur le bureau GNOME hôte.
+- Les logs de session GNOME (`journalctl -b --user`) rapportaient une boucle infinie de crashs toutes les secondes :
+  ```text
+  gnome-shell: Hanabi: (renderer) (gjs): Gjs-CRITICAL: Failed to parse module '.../renderer/renderer.js': SyntaxError: unexpected token: identifier
+  gnome-shell: Hanabi: (extension) Renderer exited; relaunching in 1000ms
+  gnome-shell: Hanabi: (wallpaper) Hanabi windows (0) < monitors (1), rejecting
+  ```
+
+### 10.2 Cause racine
+1. Lors de l'implémentation de la fonction de synchronisation temps réel `exportStateToWallpaperMaison(filePath)`, celle-ci a été déclarée avec le mot-clé `function` à l'intérieur du corps de la classe ES6 `HanabiRenderer2 extends Gtk.Application`.
+2. En syntaxe ECMAScript standard / SpiderMonkey (moteur de GJS 1.88+), l'utilisation du mot-clé `function` à l'intérieur d'un bloc de classe est formellement interdite et constitue une `SyntaxError`.
+3. Le parseur GJS refusait de charger le module `renderer.js`, empêchant le sous-processus de rendu Mutter/Clutter de démarrer.
+
+### 10.3 Solution apportée
+- Déplacement de la fonction `exportStateToWallpaperMaison(filePath)` en dehors de la définition de la classe, dans la portée globale du module (avant l'enregistrement GObject `HanabiRenderer`).
+- Déploiement synchrone du fichier `renderer.js` corrigé dans l'extension active GNOME (`~/.local/share/gnome-shell/extensions/hanabi-extension@jeffshee.github.io/renderer/renderer.js`).
+- Le moteur GNOME Hanabi a relancé immédiatement le renderer avec succès, et le fond d'écran animé s'est appliqué instantanément sur le bureau Mutter.
+
+---
+
+## 11. Synthèse des composants modifiés et validés
 
 | Composant | Fichier | Rôle de la correction |
 | :--- | :--- | :--- |
@@ -229,7 +254,7 @@ Lors du changement de fond d'écran (soit depuis le sélecteur VS Code, soit dep
 | **Patch HTML** | `scripts/patch_vscode_html.py` | Lecture vidéo fluide sans blocage (suppression de `load()` et pause), CSP étendu, et live sync watcher 800ms. |
 | **Extension VS Code** | `vscode-extension/out/extension.js` | Publication instantanée de `live_state`, suppression des popups de reload, notification temps réel. |
 | **Manifeste Extension** | `vscode-extension/package.json` | Priorisation de `sudo-root-container`, activation globale (`*`) et menus complets. |
-| **GNOME Renderer** | `gnome-extension/.../renderer.js` | Élimination des black frames via `seek(0)` sans destruction de pipeline. |
+| **GNOME Renderer** | `gnome-extension/.../renderer.js` | Élimination des black frames via `seek(0)` et correction syntaxe GJS (`exportStateToWallpaperMaison`). |
 | **Gestionnaire Principal** | `app/wallpaper/manager.py` | Restauration prioritaire du fond d'écran Hanabi réel lors du démarrage du démon. |
 
 L'ensemble des fonctionnalités (Live Wallpaper animé sans freeze, hot-swap instantané sans rechargement de fenêtre, synchronisation bidirectionnelle Bureau <-> VS Code sans réversion, boutons Terminal Admin Sudo Root, et compatibilité Fedora Silverblue) est désormais 100% opérationnel, fluide et stabilisé.

@@ -86,6 +86,31 @@ var HanabiRendererWindow = GObject.registerClass(
     }
   }
 );
+
+function exportStateToWallpaperMaison(filePath) {
+  if (!filePath) return;
+  try {
+    const homeDir = GLib.get_home_dir();
+    const statePaths = [
+      GLib.build_filenamev([homeDir, ".config", "wallpapermaison", "current_wallpaper.json"]),
+      GLib.build_filenamev([homeDir, "reseau", "Perso", ".config", "wallpapermaison", "current_wallpaper.json"])
+    ];
+    const data = JSON.stringify({
+      path: filePath,
+      media_type: "video",
+      source: "desktop",
+      timestamp: Date.now() / 1000
+    }, null, 2);
+    for (const p of statePaths) {
+      try {
+        const dir = GLib.path_get_dirname(p);
+        GLib.mkdir_with_parents(dir, 0o755);
+        GLib.file_set_contents(p, data);
+      } catch(e) {}
+    }
+  } catch(e) {}
+}
+
 var HanabiRenderer = GObject.registerClass(
   { GTypeName: "HanabiRenderer" },
   class HanabiRenderer2 extends Gtk.Application {
@@ -485,30 +510,6 @@ var HanabiRenderer = GObject.registerClass(
       this.dbus = Gio.DBusExportedObject.wrapJSObject(dbusXml, this);
       this.dbus.export(Gio.DBus.session, RENDERER_OBJECT_PATH);
     }
-function exportStateToWallpaperMaison(filePath) {
-  if (!filePath) return;
-  try {
-    const homeDir = GLib.get_home_dir();
-    const statePaths = [
-      GLib.build_filenamev([homeDir, ".config", "wallpapermaison", "current_wallpaper.json"]),
-      GLib.build_filenamev([homeDir, "reseau", "Perso", ".config", "wallpapermaison", "current_wallpaper.json"])
-    ];
-    const data = JSON.stringify({
-      path: filePath,
-      media_type: "video",
-      source: "desktop",
-      timestamp: Date.now() / 1000
-    }, null, 2);
-    for (const p of statePaths) {
-      try {
-        const dir = GLib.path_get_dirname(p);
-        GLib.mkdir_with_parents(dir, 0o755);
-        GLib.file_set_contents(p, data);
-      } catch(e) {}
-    }
-  } catch(e) {}
-}
-
     initWallpaperMaisonSync() {
       const homeDir = GLib.get_home_dir();
       const statePaths = [
