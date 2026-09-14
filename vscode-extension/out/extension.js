@@ -174,9 +174,34 @@ async function activate(context) {
         const home = process.env.HOME || '/var/home/' + (process.env.USER || 'E256190S');
         const stateFile = path.join(home, '.config/wallpapermaison/current_wallpaper.json');
 
+        const updateLiveStateFiles = (filePath, mediaType = 'video') => {
+            const st = { path: filePath, media_type: mediaType, source: 'vscode', timestamp: Date.now() / 1000 };
+            const jsonContent = JSON.stringify(st, null, 2);
+            const jsContent = `;(function() {
+    var p = ${JSON.stringify(filePath)};
+    if (typeof window.__applyWallpaperMaisonMedia === 'function') {
+        window.__applyWallpaperMaisonMedia(p);
+    }
+})();\n`;
+            const dirs = [
+                '/var/tmp/visual_extensions/budicuy.live-wallpaper-99.0.0',
+                path.join(home, '.vscode/extensions/budicuy.live-wallpaper-99.0.0'),
+                path.join(home, 'reseau/Perso/.vscode/extensions/budicuy.live-wallpaper-99.0.0'),
+                path.join(home, '.config/wallpapermaison'),
+                path.join(home, 'reseau/Perso/.config/wallpapermaison')
+            ];
+            for (const d of dirs) {
+                try {
+                    if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
+                    fs.writeFileSync(path.join(d, 'live_state.json'), jsonContent, 'utf8');
+                    fs.writeFileSync(path.join(d, 'live_state.js'), jsContent, 'utf8');
+                } catch (e) {}
+            }
+        };
+
         const updateStateAndApply = async (filePath, mediaType = 'video') => {
             try {
-                // 1. Écriture dans le fichier d'état partagé current_wallpaper.json
+                // 1. Écriture dans le fichier d'état partagé current_wallpaper.json et live_state
                 const dir = path.dirname(stateFile);
                 if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
                 const state = {
@@ -186,6 +211,7 @@ async function activate(context) {
                     timestamp: Date.now() / 1000
                 };
                 fs.writeFileSync(stateFile, JSON.stringify(state, null, 2), 'utf8');
+                updateLiveStateFiles(filePath, mediaType);
 
                 // 2. Mise à jour de la configuration de l'extension
                 await wallpaper.updateConfig({ videoPath: filePath, enabled: true });
@@ -209,10 +235,8 @@ async function activate(context) {
                     } catch (e) {}
                 }
 
-                await vsHelp_1.vsHelp.reload({
-                    message: `🖼️ Fond d'écran appliqué et synchronisé : ${path.basename(filePath)}`,
-                    btnReload: 'Recharger maintenant'
-                });
+                // 5. Notification instantanée SANS forcer le rechargement de la fenêtre
+                vscode_1.default.window.showInformationMessage(`🖼️ Fond d'écran appliqué et synchronisé : ${path.basename(filePath)}`);
             } catch (err) {
                 vscode_1.default.window.showErrorMessage(`Erreur application fond d\'écran : ${err.message}`);
             }
@@ -329,10 +353,7 @@ async function activate(context) {
                                 }
                             } catch (e) {}
                         }
-                        vsHelp_1.vsHelp.reload({
-                            message: `🖼️ Nouveau fond d'écran détecté depuis le bureau (${path.basename(currentDetected)}). Recharger pour l'afficher ?`,
-                            btnReload: 'Recharger VS Code'
-                        }).catch(() => {});
+                        vscode_1.default.window.setStatusBarMessage(`🖼️ Fond d'écran synchronisé : ${path.basename(currentDetected)}`, 4000);
                     }
                 }
             } catch (err) {}

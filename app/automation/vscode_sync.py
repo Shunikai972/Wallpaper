@@ -86,6 +86,28 @@ class VsCodeSync:
             self._last_applied_timestamp = ts
             self._last_written_path = str(file_path)
 
+            # Écriture instantanée des fichiers live_state pour mise à jour à chaud de VS Code sans reload
+            live_json_data = json.dumps({"path": str(file_path), "media_type": media_type, "timestamp": ts}, indent=2)
+            live_js_code = f""";(function() {{
+    var p = {repr(str(file_path))};
+    if (typeof window.__applyWallpaperMaisonMedia === 'function') {{
+        window.__applyWallpaperMaisonMedia(p);
+    }}
+}})();\n"""
+            for target_dir in [
+                Path("/var/tmp/visual_extensions/budicuy.live-wallpaper-99.0.0"),
+                Path.home() / ".vscode/extensions/budicuy.live-wallpaper-99.0.0",
+                Path.home() / "reseau/Perso/.vscode/extensions/budicuy.live-wallpaper-99.0.0",
+                Path.home() / ".config/wallpapermaison",
+                Path.home() / "reseau/Perso/.config/wallpapermaison"
+            ]:
+                try:
+                    target_dir.mkdir(parents=True, exist_ok=True)
+                    (target_dir / "live_state.json").write_text(live_json_data, encoding="utf-8")
+                    (target_dir / "live_state.js").write_text(live_js_code, encoding="utf-8")
+                except Exception:
+                    pass
+
             # Mise à jour du lien symbolique de téléchargement
             if media_type == "video":
                 for dl_candidate in [

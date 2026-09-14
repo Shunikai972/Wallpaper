@@ -160,17 +160,76 @@ sequenceDiagram
 
 ---
 
-## 7. Synthèse des composants modifiés et validés
+## 7. Arrière-plan vidéo bloqué / figé dans VS Code ("l'arrière plan est bloqué")
+
+### 7.1 Description du problème
+Après rechargement ou application d'un fond d'écran vidéo dans VS Code, la vidéo s'affichait mais restait totalement immobile / bloquée sur la première image (frame 0) ou se figeait à la fin de la première itération de lecture.
+
+### 7.2 Causes racines
+1. **Appel bloquant de `video.load()` suivi immédiatement de `video.play()` :**
+   Dans la spécification HTML5, appeler `video.load()` réinitialise complètement l'état du décodeur Chromium et vide le buffer. Comme la vidéo est en 4K (fichiers de 20 à 45 Mo), le décodage des premières frames prend quelques centaines de millisecondes. Appeler `video.play()` de façon synchrone immédiatement après `video.load()` provoquait un rejet de la promesse de lecture (`AbortError` / `NotAllowedError`), bloquant le décodeur.
+2. **Gestionnaire d'événement `pause` récursif parasitant la fin de boucle (`loop`) :**
+   Un écouteur d'événement `video.addEventListener('pause', ...)` avec `setTimeout(..., 20)` avait été ajouté. Lors de la fin naturelle d'une vidéo avec attribut `loop`, Chromium met brièvement le média en pause interne pendant qu'il effectue le `seek(0)`. L'interception de cette pause par un appel forcé à `play()` interrompait le pipeline de bouclage natif du navigateur, bloquant la vidéo indéfiniment sur la dernière image (`currentTime == duration`).
+3. **Throttling en arrière-plan d'Electron :**
+   Lorsque la fenêtre VS Code perd le focus, Electron applique un throttling d'économie d'énergie (`Setting background throttling for window 1 to 'true'`). La boucle `setInterval(ensureMedia, 500)` appelait `play()` de manière conflictuelle alors que le moteur Chromium refusait temporairement les opérations de rendu.
+
+### 7.3 Solution apportée
+- Suppression de l'appel à `video.load()` et du gestionnaire destructeur d'événement `pause`.
+- Initialisation propre et conforme de l'élément vidéo selon les standards de lecture Chromium/Electron :
+  ```javascript
+  video.muted = true;
+  video.defaultMuted = true;
+  video.autoplay = true;
+  video.loop = true;
+  video.playsInline = true;
+  video.preload = 'auto';
+  ```
+- Gestionnaires d'événements asynchrones non-bloquants :
+  - `video.oncanplay = function() { if (video.paused) video.play().catch(function() {}); };`
+  - `video.onloadeddata = function() { if (video.paused) video.play().catch(function() {}); };`
+  - `video.onended = function() { video.currentTime = 0; video.play().catch(function() {}); };`
+- Remplacement du polling permanent `setInterval(ensureMedia, 500)` par une reprise ciblée uniquement sur reprise de focus ou retour de visibilité (`window.addEventListener('focus', ensureMedia)` et `document.addEventListener('visibilitychange', ...)`).
+
+---
+
+## 8. Nécessité d'un rechargement manuel de la fenêtre VS Code ("j'ai du reload vscode pour que ça se mette à jour")
+
+### 8.1 Description du problème
+Lors du changement de fond d'écran (soit depuis le sélecteur VS Code, soit depuis le bureau Linux), le nouveau fond d'écran n'apparaissait dans VS Code qu'après avoir manuellement cliqué sur "Recharger la fenêtre" (`workbench.action.reloadWindow`), interrompant la session de code de l'utilisateur.
+
+### 8.2 Causes racines
+1. **Absence de pont de communication entre l'Extension Host et Monaco Workbench :**
+   Dans VS Code, l'Extension Host s'exécute dans un sous-processus Node.js distinct (`UtilityProcess type: extensionHost`), sans accès direct au DOM de la fenêtre principale `workbench.html`. Auparavant, l'extension se contentait d'afficher un popup modal `vsHelp.reload()` invitant l'utilisateur à recharger la fenêtre complète.
+2. **Restrictions de sécurité de l'architecture Electron sandboxed (`vscode-file:`) :**
+   Dans le renderer sandboxed de VS Code, le protocole interne `vscode-file://vscode-app/` interdit le chargement arbitraire de fichiers hors des racines approuvées (`validRoots`). Cependant, l'analyse du binaire de VS Code a révélé que le dossier des extensions (`extensionsPath` soit `/var/tmp/visual_extensions/`) est inclus dans `validRoots`, et que l'extension `.mp4` est présente dans `validExtensions`.
+
+### 8.3 Solution apportée (Hot-Swap en Direct Sans Reload)
+1. **Génération dynamique des fichiers d'état à chaud (`live_state.json` et `live_state.js`) :**
+   À chaque changement de fond d'écran (que ce soit depuis le démon WallpaperMaison, depuis le bureau Linux ou depuis l'extension VS Code), un fichier d'état partagé est immédiatement écrit dans :
+   `/var/tmp/visual_extensions/budicuy.live-wallpaper-99.0.0/live_state.json` et `live_state.js`.
+2. **Surveillance temps réel dans `workbench.html` (Watcher Réactif 800ms) :**
+   Une routine de polling légère intégrée dans `workbench.html` interroge le fichier d'état via l'URL autorisée :
+   `vscode-file://vscode-app/var/tmp/visual_extensions/budicuy.live-wallpaper-99.0.0/live_state.json?_t=<timestamp>`
+   (avec fallback transparent vers une balise `<script src=".../live_state.js">`).
+3. **Mise à jour directe du DOM :**
+   Dès que le chemin détecté diffère du média actif, la fonction globale `window.__applyWallpaperMaisonMedia(newPath)` est déclenchée. L'ancien élément est retiré et le nouveau média est monté et lu immédiatement dans le DOM actif.
+4. **Suppression de toutes les invites modales de rechargement :**
+   Dans `extension.js`, les appels à `vsHelp.reload()` ont été remplacés par de simples notifications d'information non-intrusives ou des messages en barre d'état (`vscode.window.setStatusBarMessage(...)`).
+   Le changement de fond d'écran s'applique ainsi **instantanément à chaud et sans aucune interruption de session ni rechargement**.
+
+---
+
+## 9. Synthèse des composants modifiés et validés
 
 | Composant | Fichier | Rôle de la correction |
 | :--- | :--- | :--- |
 | **Moteur Hanabi** | `app/wallpaper/engines/hanabi_engine.py` | Toujours synchroniser GSettings pour supprimer la boucle de rétroaction. |
-| **Sync Daemon** | `app/automation/vscode_sync.py` | Empêcher l'écho inverse lors d'un changement initié par VS Code. |
+| **Sync Daemon** | `app/automation/vscode_sync.py` | Empêcher l'écho inverse et publier immédiatement les fichiers `live_state` pour hot-swap. |
 | **Launcher** | `scripts/code-launcher.sh` | Retirer le montage de `preload.js` pour éviter les crashs Electron sandbox. |
-| **Patch HTML** | `scripts/patch_vscode_html.py` | Styles inline stricts sur `<video>`, CSP `connect-src` propre, et nettoyage de `preload.js`. |
-| **Extension VS Code** | `vscode-extension/out/extension.js` | Déploiement version 99.0.0, activation globale, synchronisation `spawnSync` et reload assisté. |
+| **Patch HTML** | `scripts/patch_vscode_html.py` | Lecture vidéo fluide sans blocage (suppression de `load()` et pause), CSP étendu, et live sync watcher 800ms. |
+| **Extension VS Code** | `vscode-extension/out/extension.js` | Publication instantanée de `live_state`, suppression des popups de reload, notification temps réel. |
 | **Manifeste Extension** | `vscode-extension/package.json` | Priorisation de `sudo-root-container`, activation globale (`*`) et menus complets. |
 | **GNOME Renderer** | `gnome-extension/.../renderer.js` | Élimination des black frames via `seek(0)` sans destruction de pipeline. |
 | **Gestionnaire Principal** | `app/wallpaper/manager.py` | Restauration prioritaire du fond d'écran Hanabi réel lors du démarrage du démon. |
 
-L'ensemble des fonctionnalités (Live Wallpaper animé, changement dynamique sans réversion, boutons Terminal Admin Sudo Root, et persistance après rechargement) est désormais opérationnel et stabilisé.
+L'ensemble des fonctionnalités (Live Wallpaper animé sans freeze, hot-swap instantané sans rechargement de fenêtre, synchronisation bidirectionnelle Bureau <-> VS Code sans réversion, boutons Terminal Admin Sudo Root, et compatibilité Fedora Silverblue) est désormais 100% opérationnel, fluide et stabilisé.
