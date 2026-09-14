@@ -77,17 +77,13 @@ if [ -n "$WP_DIR" ] && [ -f "$WP_DIR/scripts/register_extension.py" ]; then
     python3 "$WP_DIR/scripts/register_extension.py" 2>/dev/null || true
 fi
 
-# 4. Mise à jour et injection de workbench.html et preload.js
+# 4. Mise à jour et injection de workbench.html
 if [ -n "$WP_DIR" ] && [ -f "$WP_DIR/scripts/patch_vscode_html.py" ]; then
     python3 "$WP_DIR/scripts/patch_vscode_html.py" 2>/dev/null || true
 fi
 P_HTML="$HOME/reseau/Perso/.config/wallpapermaison/vscode/workbench.html"
 [ ! -f "$P_HTML" ] && P_HTML="$HOME/.config/wallpapermaison/vscode/workbench.html"
 T_HTML="/usr/apps/VSCode-linux-x64/resources/app/out/vs/code/electron-browser/workbench/workbench.html"
-
-P_PRELOAD="$HOME/reseau/Perso/.config/wallpapermaison/vscode/preload.js"
-[ ! -f "$P_PRELOAD" ] && P_PRELOAD="$HOME/.config/wallpapermaison/vscode/preload.js"
-T_PRELOAD="/usr/apps/VSCode-linux-x64/resources/app/out/vs/base/parts/sandbox/electron-browser/preload.js"
 
 # 5. Détection du binaire VS Code réel
 VSCODE_BIN="/usr/apps/VSCode-linux-x64/code"
@@ -116,9 +112,6 @@ done
 # 7. Lancement GUI avec bwrap pour injecter le fond d'écran et l'action sudo
 if command -v bwrap >/dev/null 2>&1 && [ -f "$P_HTML" ] && [ -f "$T_HTML" ] && [ -x "$VSCODE_BIN" ]; then
     BWRAP_ARGS="--dev-bind / / --ro-bind $P_HTML $T_HTML"
-    if [ -f "$P_PRELOAD" ] && [ -f "$T_PRELOAD" ]; then
-        BWRAP_ARGS="$BWRAP_ARGS --ro-bind $P_PRELOAD $T_PRELOAD"
-    fi
     if [ -n "$REAL_LIB" ] && [ -f "$REAL_LIB" ]; then
         if [ -f "/usr/lib64/libopenh264.so.8" ]; then
             BWRAP_ARGS="$BWRAP_ARGS --ro-bind $REAL_LIB /usr/lib64/libopenh264.so.8"

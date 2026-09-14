@@ -93,13 +93,22 @@ def patch_workbench(video_path: str = None) -> bool:
         except Exception:
             pass
 
+    # Format vscode-file:// pour le fichier d'état partagé current_wallpaper.json
+    state_vsc_url = f"vscode-file://vscode-app{quote(str(state_files[0]))}"
+
     content = orig_path.read_text(encoding="utf-8")
 
-    # 1. Mise à jour CSP
+    # 1. Mise à jour CSP pour autoriser les médias locaux et les connexions locales
     content = content.replace("script-src", "script-src 'unsafe-inline'")
     content = content.replace("media-src", "media-src 'self' vscode-file: vscode-remote-resource: https: blob: data:")
     content = content.replace("img-src", "img-src 'self' vscode-file: vscode-remote-resource: https: blob: data:")
-    content = content.replace("connect-src", "connect-src 'self' vscode-file: vscode-remote-resource: https: ws: http:")
+    if "connect-src" in content:
+        content = content.replace("connect-src", "connect-src 'self' vscode-file: vscode-remote-resource: https: ws: http:")
+    else:
+        content = content.replace(
+            "default-src\n\t\t\t\t\t'none'\n\t\t\t\t;",
+            "default-src 'none';\n\t\t\t\tconnect-src 'self' vscode-file: vscode-remote-resource: https: ws: http:;"
+        )
     content = re.sub(r"require-trusted-types-for[^;]*;", "", content)
     content = re.sub(r"trusted-types[^;]*;", "", content)
 
@@ -317,17 +326,6 @@ def patch_workbench(video_path: str = None) -> bool:
     }}
 
     function ensureMedia() {{
-        // Synchronisation proactive avec l'état sur disque
-        if (window.vscode && typeof window.vscode.getWallpaperState === 'function') {{
-            try {{
-                var st = window.vscode.getWallpaperState();
-                if (st && st.path && st.path !== currentRawPath) {{
-                    applyMedia(st.path);
-                    return;
-                }}
-            }} catch(e) {{}}
-        }}
-
         var vid = document.getElementById(LW_VIDEO_ID);
         var img = document.getElementById(LW_IMG_ID);
         if (!vid && !img) {{
@@ -347,19 +345,7 @@ def patch_workbench(video_path: str = None) -> bool:
         if (e) {{ e.preventDefault(); e.stopPropagation(); }}
         console.log("[WallpaperMaison] Déclenchement du Terminal Sudo Root...");
 
-        // 1. Déclenchement direct via runCommand (injecté dans preload.js)
-        if (window.vscode && typeof window.vscode.runCommand === 'function') {{
-            window.vscode.runCommand('liveWallpaper.openSudoTerminal');
-            return;
-        }}
-
-        // 2. Déclenchement via ipcRenderer emit
-        if (window.vscode && window.vscode.ipcRenderer && typeof window.vscode.ipcRenderer.emit === 'function') {{
-            window.vscode.ipcRenderer.emit('vscode:runAction', {{}}, {{ id: 'liveWallpaper.openSudoTerminal', from: 'button', args: [] }});
-            return;
-        }}
-
-        // 3. Déclenchement via DOM (item terminal ou bouton statusbar)
+        // Déclenchement via DOM (item terminal, statusbar item ou bouton activity bar)
         var candidates = [
             document.getElementById('sudoRootStatusItem'),
             document.querySelector('[id*="sudoRoot"]'),
@@ -373,12 +359,6 @@ def patch_workbench(video_path: str = None) -> bool:
                 candidates[i].click();
                 return;
             }}
-        }}
-
-        // 4. Fallback runCommand terminal classique
-        if (window.vscode && typeof window.vscode.runCommand === 'function') {{
-            window.vscode.runCommand('workbench.action.terminal.new');
-            return;
         }}
     }}
 
@@ -454,25 +434,19 @@ def patch_workbench(video_path: str = None) -> bool:
             }} catch(e) {{}}
         }}
 
-        // 1. Écoute des messages (transmis par fs.watchFile dans preload.js)
+        // 1. Écoute des messages
         window.addEventListener('message', function(e) {{
             if (e && e.data && e.data.type === 'wallpapermaison:state') {{
                 applyState(e.data.data);
             }}
         }});
 
-        // 2. Sondage synchrone continu via getWallpaperState de preload.js
-        function pollSync() {{
-            try {{
-                if (window.vscode && typeof window.vscode.getWallpaperState === 'function') {{
-                    var st = window.vscode.getWallpaperState();
-                    if (st) applyState(st);
-                }}
-            }} catch(e) {{}}
-        }}
-
-        setInterval(pollSync, 200);
-        pollSync();
+        // 2. Écoute des événements personnalisés
+        window.addEventListener('wallpaper:change', function(e) {{
+            if (e && e.detail) {{
+                applyState(e.detail);
+            }}
+        }});
     }}
 
     function init() {{
@@ -529,59 +503,21 @@ def patch_workbench(video_path: str = None) -> bool:
     return True
 
 def patch_preload() -> bool:
-    orig_path = Path("/usr/apps/VSCode-linux-x64/resources/app/out/vs/base/parts/sandbox/electron-browser/preload.js")
-    if not orig_path.exists():
-        return False
-
-    orig = orig_path.read_text(encoding="utf-8")
-    target = ",f={ipcRenderer:{"
-    helper_code = (
-        ';const _node_fs=require("fs"),_node_path=require("path");'
-        'function _getWallpaperState(){try{'
-        'const h=process.env.HOME||"/var/home/"+(process.env.USER||"E256190S");'
-        'for(const p of [_node_path.join(h,".config/wallpapermaison/current_wallpaper.json"),_node_path.join(h,"reseau/Perso/.config/wallpapermaison/current_wallpaper.json")]){'
-        'if(_node_fs.existsSync(p)){return JSON.parse(_node_fs.readFileSync(p,"utf8"));}'
-        '}}catch(e){}return null;}'
-        'try{const h=process.env.HOME||"/var/home/"+(process.env.USER||"E256190S");'
-        'const sf=_node_path.join(h,".config/wallpapermaison/current_wallpaper.json");'
-        'if(_node_fs.existsSync(sf)){_node_fs.watchFile(sf,{interval:200},(c,p)=>{try{'
-        'const d=JSON.parse(_node_fs.readFileSync(sf,"utf8"));'
-        'window.postMessage({type:"wallpapermaison:state",data:d},"*");'
-        '}catch(e){}})}}catch(e){}'
-        ';const f={'
-    )
-    replacement = (
-        helper_code +
-        'getWallpaperState(){return _getWallpaperState()},'
-        'runCommand(cmd,...args){r.emit("vscode:runAction",{},{id:cmd,from:"button",args:args})},'
-        'ipcRenderer:{emit(e,...n){r.emit(e,...n)},'
-    )
-
-    if target in orig:
-        patched = orig.replace(target, replacement)
-    else:
-        # Fallback si f={ipcRenderer:{
-        target2 = "f={ipcRenderer:{"
-        if target2 in orig:
-            patched = orig.replace(target2, "f={getWallpaperState(){return _getWallpaperState()}," + replacement[len(helper_code)+3:])
-        else:
-            patched = orig
-
+    # Ne PAS patcher preload.js dans le bac à sable Electron (sandbox)
+    # L'original de VS Code doit être préservé sans altération pour garantir
+    # le bon démarrage de tous les services de fenêtres et boutons Monaco.
     targets = [
         Path.home() / "reseau/Perso/.config/wallpapermaison/vscode/preload.js",
         Path.home() / ".config/wallpapermaison/vscode/preload.js",
         Path.home() / "reseau/Perso/.local/share/vscode/resources/app/out/vs/base/parts/sandbox/electron-browser/preload.js",
         Path.home() / ".local/share/vscode/resources/app/out/vs/base/parts/sandbox/electron-browser/preload.js"
     ]
-
     for t in targets:
         try:
-            t.parent.mkdir(parents=True, exist_ok=True)
-            with open(t, "w", encoding="utf-8") as f:
-                f.write(patched)
+            if t.exists():
+                t.unlink()
         except Exception:
             pass
-
     return True
 
 if __name__ == "__main__":
