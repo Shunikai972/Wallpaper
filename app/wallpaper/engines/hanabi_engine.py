@@ -82,18 +82,22 @@ class HanabiWallpaperEngine(BaseWallpaperEngine):
         if not p.exists():
             return False
         try:
+            # 0. Résolution de la version optimisée 1080p pour fluidité 60 FPS sans saccade
+            from app.wallpaper.video_optimizer import video_optimizer
+            playable_path = video_optimizer.get_playable_path(str(p))
+
             # 1. S'assurer que l'extension GNOME Shell Hanabi est activée
             if shutil.which("gnome-extensions"):
                 subprocess.run(["gnome-extensions", "enable", self.UUID], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
             # 2. Toujours synchroniser la clé GSettings de Hanabi
-            subprocess.run(["gsettings", "set", self.SCHEMA, "video-path", str(p)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(["gsettings", "set", self.SCHEMA, "video-path", playable_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             for s_dir in [
                 Path.home() / ".local/share/gnome-shell/extensions/hanabi-extension@jeffshee.github.io/schemas",
                 Path.home() / "reseau/Perso/.local/share/gnome-shell/extensions/hanabi-extension@jeffshee.github.io/schemas"
             ]:
                 if s_dir.exists():
-                    subprocess.run(["gsettings", "--schemadir", str(s_dir), "set", self.SCHEMA, "video-path", str(p)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    subprocess.run(["gsettings", "--schemadir", str(s_dir), "set", self.SCHEMA, "video-path", playable_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
             # 3. Tenter un hot-swap instantané et sans coupure via DBus si le renderer est actif
             hot_swapped = False
@@ -104,7 +108,7 @@ class HanabiWallpaperEngine(BaseWallpaperEngine):
                         "--dest", "io.github.jeffshee.HanabiRenderer",
                         "--object-path", "/io/github/jeffshee/HanabiRenderer",
                         "--method", "io.github.jeffshee.HanabiRenderer.setFilePath",
-                        str(p)
+                        playable_path
                     ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=1.5)
                     if dbus_res.returncode == 0:
                         hot_swapped = True

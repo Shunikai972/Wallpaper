@@ -378,15 +378,23 @@ ROTATION_ORDER=random
 * **Problème rencontré** : Sous GNOME Shell 45 à 50+, GJS utilise le moteur SpiderMonkey strict. L'usage de déclarations de fonction classiques (`function foo()`) à l'intérieur du corps de classes ES6 dans les extensions GNOME provoque un rejet immédiat (`SyntaxError: unexpected token: identifier`) bloquant le sous-processus renderer.
 * **Solution apportée** : Portée modulaire standardisée pour les fonctions utilitaires exportées et méthodes de classe pures sans mots-clés parasites, assurant un chargement 100% robuste sur tout nouveau poste.
 
+### 5. Saccades sur vidéos 4K, 60 FPS et codecs lourds (AV1, HEVC)
+* **Problème rencontré** : Sur un écran 1080p, jouer des vidéos 4K (3840x2160) ou à très haut débit en décodage logiciel CPU saturait le processeur (> 100% CPU), entraînant des saccades violentes et des pertes d'images. De plus, le polling d'état synchrone sur le partage réseau NFS bloquait périodiquement la boucle d'événements graphique GTK.
+* **Solution apportée** :
+  1. **Optimiseur vidéo matériel (`VideoOptimizer`)** : transcodage automatique vers un profil 1080p H.264 High 4.1 yuv420p à latence zéro (`-bf 0`, CRF 19) mis en cache de manière persistante sur le partage réseau `~/.cache/wallpapermaison/optimized/`.
+  2. **Scanout matériel direct Wayland** : activation native de `GtkGraphicsOffload` pour contourner la composition CPU de GTK.
+  3. **Boucle native fluide & purge mémoire** : utilisation de `loop: true` natif et libération immédiate des pipelines précédents avec `oldMedia.clear()`.
+  4. **Suppression du polling NFS** : vérification locale à basse priorité (`GLib.PRIORITY_LOW` à 1000 ms), éliminant tout gel d'affichage.
+
 ---
 
 ## 🧪 Exécution des Tests Automatisés
 
-Le projet inclut une suite de tests unitaires couvrant l'ensemble des modules (y compris l'autostart, la colorimétrie WCAG, la persistance et le stockage) :
+Le projet inclut une suite de tests unitaires couvrant l'ensemble des modules (y compris l'autostart, la colorimétrie WCAG, la persistance, le stockage et l'optimiseur vidéo fluide) :
 ```bash
 python -m unittest discover -s tests
 ```
-*Résultat attendu : `Ran 35 tests ... OK`*
+*Résultat attendu : `Ran 39 tests ... OK`*
 
 ---
 

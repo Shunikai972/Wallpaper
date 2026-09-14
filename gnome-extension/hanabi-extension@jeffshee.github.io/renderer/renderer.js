@@ -87,6 +87,20 @@ var HanabiRendererWindow = GObject.registerClass(
   }
 );
 
+function resolveOptimizedVideoPath(filePath) {
+  if (!filePath) return filePath;
+  try {
+    const homeDir = GLib.get_home_dir();
+    const basename = GLib.path_get_basename(filePath);
+    const candidate = GLib.build_filenamev([homeDir, ".cache", "wallpapermaison", "optimized", basename]);
+    const f = Gio.File.new_for_path(candidate);
+    if (f.query_exists(null)) {
+      return candidate;
+    }
+  } catch(e) {}
+  return filePath;
+}
+
 function exportStateToWallpaperMaison(filePath) {
   if (!filePath) return;
   try {
@@ -353,7 +367,7 @@ var HanabiRenderer = GObject.registerClass(
         });
         picture.set_content_fit(contentFit);
         this.pictures.push(picture);
-        if (isEnableGraphicsOffload) {
+        if (isEnableGraphicsOffload || typeof Gtk.GraphicsOffload !== "undefined") {
           const offload = Gtk.GraphicsOffload["new"](picture);
           offload.set_enabled(Gtk.GraphicsOffloadEnabled.ENABLED);
           return offload;
@@ -465,26 +479,15 @@ var HanabiRenderer = GObject.registerClass(
     getGtkStockWidget() {
       this.gstImplName = "GtkMediaFile";
       if (videoPath && videoPath.trim() !== "") {
-        this.currentFile = Gio.File.new_for_path(videoPath);
+        const playable = resolveOptimizedVideoPath(videoPath);
+        this.currentFile = Gio.File.new_for_path(playable);
         this.media = Gtk.MediaFile.new_for_file(this.currentFile);
       } else {
         this.currentFile = null;
         this.media = new Gtk.MediaFile();
       }
-      this.media.set({ loop: false, playing: true });
+      this.media.set({ loop: true, playing: true });
       this.connectMediaSignals(this.media);
-      GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
-        if (!this.media || !this.currentFile)
-          return true;
-        const ts = this.media.get_timestamp();
-        const dur = this.media.get_duration();
-        const ended = this.media.get_ended();
-        if (dur > 0 && (ended || ts >= dur - 100000)) {
-          this.media.seek(0);
-          this.media.play();
-        }
-        return true;
-      });
       this.sharedPaintable = this.media;
       const widget = this.getWidgetFromSharedPaintable();
       this.markRandomStartPending();
@@ -512,40 +515,34 @@ var HanabiRenderer = GObject.registerClass(
     }
     initWallpaperMaisonSync() {
       const homeDir = GLib.get_home_dir();
-      const statePaths = [
-        GLib.build_filenamev([homeDir, ".config", "wallpapermaison", "current_wallpaper.json"]),
-        GLib.build_filenamev([homeDir, "reseau", "Perso", ".config", "wallpapermaison", "current_wallpaper.json"])
-      ];
+      const localState = GLib.build_filenamev([homeDir, ".config", "wallpapermaison", "current_wallpaper.json"]);
       let lastTimestamp = 0;
 
       const checkSync = () => {
-        for (const p of statePaths) {
-          try {
-            const f = Gio.File.new_for_path(p);
-            if (f.query_exists(null)) {
-              const [ok, bytes] = f.load_contents(null);
-              if (ok) {
-                const text = new TextDecoder().decode(bytes);
-                const data = JSON.parse(text);
-                if (data && data.path) {
-                  const ts = Number(data.timestamp) || 0;
-                  if (ts > lastTimestamp || (lastTimestamp === 0 && data.path !== videoPath)) {
-                    lastTimestamp = ts;
-                    if (data.path !== videoPath) {
-                      console.log(`[WallpaperMaison] Synchronisation vidéo desktop: ${data.path}`);
-                      this.setFilePath(data.path, false);
-                    }
+        try {
+          const f = Gio.File.new_for_path(localState);
+          if (f.query_exists(null)) {
+            const [ok, bytes] = f.load_contents(null);
+            if (ok) {
+              const text = new TextDecoder().decode(bytes);
+              const data = JSON.parse(text);
+              if (data && data.path) {
+                const ts = Number(data.timestamp) || 0;
+                if (ts > lastTimestamp || (lastTimestamp === 0 && data.path !== videoPath)) {
+                  lastTimestamp = ts;
+                  if (data.path !== videoPath) {
+                    console.log(`[WallpaperMaison] Synchronisation vidéo desktop: ${data.path}`);
+                    this.setFilePath(data.path, false);
                   }
                 }
               }
-              break;
             }
-          } catch(e) {}
-        }
+          }
+        } catch(e) {}
       };
 
       checkSync();
-      GLib.timeout_add(GLib.PRIORITY_DEFAULT, 250, () => {
+      GLib.timeout_add(GLib.PRIORITY_LOW, 1000, () => {
         checkSync();
         return true;
       });
@@ -583,20 +580,21 @@ var HanabiRenderer = GObject.registerClass(
     setFilePath(_videoPath, broadcast = true) {
       if (!_videoPath || _videoPath.trim() === "")
         return;
+      const targetPlayable = resolveOptimizedVideoPath(_videoPath);
       if (_videoPath === videoPath && this.media && this.playing)
         return;
       videoPath = _videoPath;
       if (broadcast) {
         exportStateToWallpaperMaison(_videoPath);
       }
-      this.currentFile = Gio.File.new_for_path(_videoPath);
+      this.currentFile = Gio.File.new_for_path(targetPlayable);
       if (this.play) {
         this.play.set_uri(this.currentFile.get_uri());
         this.markRandomStartPending();
         this.setPlay();
       } else if (this.media) {
         const newMedia = Gtk.MediaFile.new_for_file(this.currentFile);
-        newMedia.set({ loop: false, playing: true });
+        newMedia.set({ loop: true, playing: true });
         this.connectMediaSignals(newMedia);
         newMedia.connect("notify::prepared", () => {
           this.pictures.forEach((p) => p.set_paintable(newMedia));
@@ -608,7 +606,10 @@ var HanabiRenderer = GObject.registerClass(
           this.setMute(mute);
           this.markRandomStartPending();
           if (oldMedia) {
-            try { oldMedia.pause(); } catch(e) {}
+            try { 
+              oldMedia.pause();
+              oldMedia.clear();
+            } catch(e) {}
           }
           if (this.dbus) {
             this.dbus.emit_signal("isPlayingChanged", new GLib.Variant("(b)", [true]));

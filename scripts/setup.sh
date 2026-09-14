@@ -97,21 +97,34 @@ else
     SYSTEM_FFMPEG_HAS_H264=false
 fi
 
-# Configuration Flatpak io.mpv.Mpv si nécessaire
+# Configuration Flatpak pour mpv et ffmpeg complet si nécessaire
 if [ "$NEED_MPV_WRAPPER" = true ] || [ "$SYSTEM_FFMPEG_HAS_H264" = false ]; then
     if command -v flatpak &>/dev/null; then
-        if ! flatpak info io.mpv.Mpv &>/dev/null; then
+        FLATPAK_APP=""
+        if flatpak info io.mpv.Mpv &>/dev/null; then
+            FLATPAK_APP="io.mpv.Mpv"
+        elif flatpak info io.github.celluloid_player.Celluloid &>/dev/null; then
+            FLATPAK_APP="io.github.celluloid_player.Celluloid"
+        else
             echo "📥 Installation du Flatpak officiel io.mpv.Mpv (avec codecs H.264 / HEVC)..."
             flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo 2>/dev/null || true
             flatpak install --user -y flathub io.mpv.Mpv 2>/dev/null || true
+            if flatpak info io.mpv.Mpv &>/dev/null; then
+                FLATPAK_APP="io.mpv.Mpv"
+            fi
         fi
 
-        if flatpak info io.mpv.Mpv &>/dev/null; then
-            echo "✓ io.mpv.Mpv Flatpak opérationnel."
+        if [ -n "$FLATPAK_APP" ]; then
+            echo "✓ Flatpak ${FLATPAK_APP} opérationnel pour mpv et ffmpeg."
             # Wrapper MPV
             cat << 'EOF_MPV' > "${HOME}/.local/bin/mpv"
 #!/usr/bin/env bash
-exec flatpak run --filesystem=host io.mpv.Mpv "$@"
+if flatpak info io.mpv.Mpv &>/dev/null; then
+    exec flatpak run --filesystem=host io.mpv.Mpv "$@"
+elif flatpak info io.github.celluloid_player.Celluloid &>/dev/null; then
+    exec flatpak run --filesystem=host --command=mpv io.github.celluloid_player.Celluloid "$@"
+fi
+exec mpv "$@"
 EOF_MPV
             chmod +x "${HOME}/.local/bin/mpv"
             echo "✓ Wrapper ${HOME}/.local/bin/mpv configuré."
@@ -119,7 +132,12 @@ EOF_MPV
             # Wrapper FFmpeg complet
             cat << 'EOF_FFMPEG' > "${HOME}/.local/bin/ffmpeg-full"
 #!/usr/bin/env bash
-exec flatpak run --filesystem=host --command=ffmpeg io.mpv.Mpv "$@"
+if flatpak info io.mpv.Mpv &>/dev/null; then
+    exec flatpak run --filesystem=host --command=ffmpeg io.mpv.Mpv "$@"
+elif flatpak info io.github.celluloid_player.Celluloid &>/dev/null; then
+    exec flatpak run --filesystem=host --command=ffmpeg io.github.celluloid_player.Celluloid "$@"
+fi
+exec ffmpeg "$@"
 EOF_FFMPEG
             chmod +x "${HOME}/.local/bin/ffmpeg-full"
             echo "✓ Wrapper ${HOME}/.local/bin/ffmpeg-full configuré."

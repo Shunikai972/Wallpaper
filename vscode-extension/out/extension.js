@@ -175,24 +175,40 @@ async function activate(context) {
             const isVid = mediaType === 'video' || ['.mp4', '.webm', '.mkv', '.mov'].some(ext => filePath.toLowerCase().endsWith(ext));
             const resolvedType = isVid ? 'video' : 'image';
 
+            // 0. Résolution de la version optimisée 1080p pour fluidité maximale sans saccade
+            let playablePath = filePath;
+            if (isVid) {
+                const optCandidates = [
+                    path.join(home, '.cache/wallpapermaison/optimized', path.basename(filePath)),
+                    path.join(home, 'reseau/Perso/.cache/wallpapermaison/optimized', path.basename(filePath))
+                ];
+                for (const c of optCandidates) {
+                    if (fs.existsSync(c)) {
+                        playablePath = c;
+                        break;
+                    }
+                }
+            }
+
             // 1. Écriture dans le fichier d'état partagé current_wallpaper.json et live_state
             const dir = path.dirname(stateFile);
             if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
             const state = {
                 path: filePath,
+                playable_path: playablePath,
                 media_type: resolvedType,
                 source: 'vscode',
                 timestamp: Date.now() / 1000
             };
             fs.writeFileSync(stateFile, JSON.stringify(state, null, 2), 'utf8');
-            updateLiveStateFiles(filePath, resolvedType);
+            updateLiveStateFiles(playablePath, resolvedType);
 
             // 2. Application immédiate sur GNOME Shell Mutter (Extension Hanabi ou GSettings Background)
             try {
                 const cp = require('child_process');
                 if (isVid) {
-                    cp.spawn('gsettings', ['set', 'io.github.jeffshee.hanabi-extension', 'video-path', filePath]);
-                    cp.spawn('gdbus', ['call', '--session', '--dest', 'io.github.jeffshee.HanabiRenderer', '--object-path', '/io/github/jeffshee/HanabiRenderer', '--method', 'io.github.jeffshee.HanabiRenderer.setFilePath', filePath]);
+                    cp.spawn('gsettings', ['set', 'io.github.jeffshee.hanabi-extension', 'video-path', playablePath]);
+                    cp.spawn('gdbus', ['call', '--session', '--dest', 'io.github.jeffshee.HanabiRenderer', '--object-path', '/io/github/jeffshee/HanabiRenderer', '--method', 'io.github.jeffshee.HanabiRenderer.setFilePath', playablePath]);
                 } else {
                     const fileUri = 'file://' + filePath;
                     cp.spawn('gsettings', ['set', 'org.gnome.desktop.background', 'picture-uri', fileUri]);
@@ -201,13 +217,13 @@ async function activate(context) {
             } catch (e) {}
 
             // 3. Mise à jour de la configuration de l'extension
-            await wallpaper.updateConfig({ videoPath: filePath, enabled: true });
+            await wallpaper.updateConfig({ videoPath: playablePath, enabled: true });
 
             // 4. Mise à jour synchrone du patch workbench.html
             const patchScript = path.join(home, 'reseau/Perso/Bureau/Wallpaper/scripts/patch_vscode_html.py');
             if (fs.existsSync(patchScript)) {
                 try {
-                    require('child_process').spawnSync('python3', [patchScript, filePath], { timeout: 3000 });
+                    require('child_process').spawnSync('python3', [patchScript, playablePath], { timeout: 3000 });
                 } catch (e) {}
             }
 
