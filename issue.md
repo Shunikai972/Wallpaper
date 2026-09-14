@@ -1,0 +1,176 @@
+# Rapport d'Analyse et Résolution des Incidents (Post-Mortem) — WallpaperMaison & VS Code Integration
+
+Ce document récapitule l'ensemble des anomalies rencontrées lors du développement de l'intégration entre **WallpaperMaison** (moteur GNOME Shell Hanabi) et **Visual Studio Code** sous un environnement immuable Linux (Fedora Silverblue), ainsi que les causes profondes identifiées et les solutions architecturales déployées.
+
+---
+
+## 1. Disparition du bouton "Admin Terminal" / "Sudo Root" et des 2 boutons d'action du Terminal
+
+### 1.1 Description du problème
+- L'icône bouclier ⚡ Sudo Root présente dans la barre d'activité latérale gauche (Activity Bar) avait disparu.
+- Les 2 boutons d'action situés dans l'en-tête du panneau Terminal de VS Code (`⚡ Terminal Sudo Root` et `⚡ Split Terminal Sudo Root`) n'apparaissaient plus.
+
+### 1.2 Cause racine
+1. Dans le fichier `vscode-extension/package.json`, une vue additionnelle (`wallpaper-container`) avait été déclarée avant `sudo-root-container` dans `viewsContainers.activitybar`, masquant ou décalant l'icône Sudo Root.
+2. Les menus `terminal/title` et `view/title` disposaient de clauses `when` trop restrictives (`terminalProcessSupported`), empêchant leur affichage dans certaines configurations de fenêtres.
+3. L'extension n'était pas garantie de démarrer immédiatement sans interaction utilisateur (`activationEvents` ne comportait pas `"*"`).
+
+### 1.3 Solution apportée
+- Réorganisation de `package.json` en plaçant `sudo-root-container` en première position des `viewsContainers.activitybar`.
+- Ajout de l'événement d'activation universel `"activationEvents": ["*"]`.
+- Enregistrement redondant des 2 boutons dans l'ensemble des points d'ancrage de menus de VS Code :
+  - `terminal/title` (boutons d'action directs en haut à droite du panneau Terminal).
+  - `view/title` (`when: view == terminal`).
+  - `editor/title` (`when: activeEditor == 'terminalEditor'`).
+  - `terminal/context` et `terminal/title/context`.
+- Maintien d'un élément persistant dans la barre d'état (`sudoRootStatusItem`) et injection d'un bouton d'action SVG résilient dans `workbench.html` via `scripts/patch_vscode_html.py`.
+
+---
+
+## 2. Erreur EROFS (`Cannot write to file — EROFS: read-only file system`)
+
+### 2.1 Description du problème
+Lors de toute modification de configuration ou application du fond d'écran depuis l'extension VS Code, une notification rouge bloquante s'affichait :
+```text
+Live Wallpaper: Cannot write to file — EROFS: read-only file system, access '/usr/apps/VSCode-linux-x64/resources/app/out/vs/code/electron-browser/workbench/workbench.html'
+```
+
+### 2.2 Cause racine
+- Le système d'exploitation utilisé est **Fedora Silverblue**, une distribution Linux immuable où `/usr` est monté en lecture seule stricte (`EROFS`).
+- Même avec les privilèges administrateur (`root`), aucune écriture directe n'est autorisée sur `/usr`.
+- Le code source original de l'extension `budicuy.live-wallpaper` (`PatchFile.base.js`) tentait d'écrire directement dans l'arborescence `/usr/apps/...` et déclenchait un fallback sudo qui échouait systématiquement avec l'erreur `EROFS`.
+
+### 2.3 Solution apportée
+- Dans `PatchFile.base.js` et `LiveWallpaper.js`, intercepter explicitement l'erreur `code === 'EROFS'` et vérifier si le chemin débute par `/usr/`.
+- Annuler l'écriture directe sur `/usr` sans générer d'erreur utilisateur.
+- Déléguer la modification du fond d'écran à la copie utilisateur modifiable montée dynamiquement par Bubblewrap (`bwrap`) via le script `scripts/patch_vscode_html.py` et le fichier d'état partagé `~/.config/wallpapermaison/current_wallpaper.json`.
+
+---
+
+## 3. Micro-coupures et images noires périodiques (Black Frames) sous GNOME Hanabi
+
+### 3.1 Description du problème
+À chaque fin de boucle de lecture de la vidéo de fond d'écran sur le bureau GNOME, un écran noir furtif (black frame) d'une durée de 50 à 100 ms apparaissait.
+
+### 3.2 Cause racine
+- Dans l'extension GNOME Shell Hanabi (`renderer/renderer.js`), le gestionnaire de fin de média (`media.connect('eos')` ou réinitialisation) procédait à la destruction complète de l'objet média Clutter/GStreamer (`media.destroy()`) puis recréait une nouvelle instance.
+- Cette destruction/recréation réinitialisait la surface graphique Mutter et purgeait le pipeline vidéo, provoquant une coupure visuelle noire pendant l'allocation du nouveau buffer.
+
+### 3.3 Solution apportée
+- Modification de `renderer.js` : suppression de la destruction récurrente du pipeline média.
+- Implémentation d'une transition continue sans rupture via `media.seek(0); media.play();` sur l'élément existant.
+- Maintien du cache mémoire des frames vidéo pour éliminer 100% des images noires lors des transitions de boucle.
+
+---
+
+## 4. Perte du fond d'écran au rechargement de VS Code (`Developer: Reload Window`)
+
+### 4.1 Description du problème
+Lors d'un rechargement de la fenêtre VS Code (`Ctrl+R` ou commande `Reload Window`), la vidéo d'arrière-plan disparaissait complètement, laissant un fond gris ou noir classique.
+
+### 4.2 Cause racine
+1. Lors du rechargement, Monaco Workbench réinitialise l'arbre DOM et détruit les éléments enfants non managés de `document.body`.
+2. Les propriétés CSS n'étaient déclarées que dans une balise `<style>`, qui était réécrasée ou ignorée par les règles CSS natives de Monaco à l'initialisation.
+3. L'ancien mécanisme de surveillance dans `workbench.html` tentait d'effectuer un `fetch("vscode-file://vscode-app/.../current_wallpaper.json?_t=" + Date.now())`. Le protocole interne de VS Code (`vscode-file:`) traite la chaîne `?_t=...` comme faisant partie intégrante du nom de fichier sur le disque, ce qui provoquait une erreur `404 / ENOENT`.
+
+### 4.3 Solution apportée
+- Injection de styles inline stricts directement dans `video.style.cssText` lors de la création de la balise `<video>` :
+  ```css
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  object-fit: cover !important;
+  opacity: 0.35 !important;
+  z-index: 999 !important;
+  pointer-events: none !important;
+  display: block !important;
+  ```
+- Ajout d'une routine de réconciliation `ensureMedia()` appelée périodiquement (toutes les 500 ms) ainsi que sur les événements de fenêtre (`focus`, `visibilitychange`, `keydown`). Si l'élément `<video>` a été démonté par Monaco, il est réinséré et relancé instantanément.
+
+---
+
+## 5. Écran vide / Crash du démarrage de VS Code ("Aucun bouton ni affichage")
+
+### 5.1 Description du problème
+Après une tentative d'injection IPC dans `preload.js`, la fenêtre VS Code devenait totalement blanche ou vide, sans aucune barre de menus, ni boutons, ni explorateur, et le processus consommait jusqu'à 75% de CPU.
+
+### 5.2 Cause racine
+- VS Code s'exécute sous Electron avec le bac à sable activé (`--enable-sandbox`).
+- Dans un environnement de rendu sandboxed, les modules Node.js comme `fs` et `path` sont **strictement interdits** dans le script de préchargement (`preload.js`).
+- La tentative d'exécuter `require("fs")` dans `preload.js` levait une exception `Uncaught Error: Cannot find module 'fs'`, stoppant l'exécution du script avant que `contextBridge.exposeInMainWorld("vscode", ...)` ne soit appelé.
+- Sans l'objet global `window.vscode`, Monaco Workbench ne pouvait résoudre sa configuration ni démarrer aucun de ses services internes, gelant la fenêtre.
+
+### 5.3 Solution apportée
+- Retrait immédiat et définitif de tout bind-mount de `preload.js` dans `scripts/code-launcher.sh`.
+- Suppression de la fonction `patch_preload()` dans `scripts/patch_vscode_html.py` et purge des copies locales de `preload.js`.
+- VS Code utilise exclusivement son fichier officiel d'origine `/usr/apps/.../preload.js`, garantissant la stabilité du runtime et le bon fonctionnement de tous les services et boutons.
+
+---
+
+## 6. Réversion automatique vers "denji" après 1 seconde (Boucle de rétroaction / Echo Loop)
+
+### 6.1 Description du problème
+Lors du choix d'un nouveau fond d'écran :
+1. Le nouveau fond s'affichait pendant environ 1 seconde sur le bureau.
+2. Le bureau basculait à nouveau automatiquement sur l'ancien fond d'écran (`denji`).
+3. VS Code ne prenait pas en compte le changement et restait bloqué sur `denji`.
+
+### 6.2 Cause racine (Diagramme de la boucle vicieuse)
+Une boucle de rétroaction destructrice s'était formée entre le moteur GNOME Hanabi et le service de synchronisation `vscode_sync.py` :
+
+```mermaid
+sequenceDiagram
+    participant User as Utilisateur (VS Code ou GUI)
+    participant WM as WallpaperManager
+    participant Hanabi as Hanabi Engine
+    participant GSettings as GNOME GSettings
+    participant Sync as vscode_sync (Daemon)
+
+    User->>WM: Appliquer nouveau wallpaper (ex: jinx)
+    WM->>Hanabi: apply(jinx)
+    Hanabi->>Hanabi: Hot-swap DBus réussi
+    Note over Hanabi,GSettings: ANOMALIE: GSettings n'est PAS mis à jour (resté sur denji)
+    Sync->>GSettings: _watch_loop lit GSettings (denji)
+    Sync->>Sync: Détection d'un "changement bureau" (denji != jinx)
+    Sync->>WM: publish_state(denji, source="desktop")
+    WM->>Hanabi: apply(denji)
+    Note over User,Sync: Résultat: Le bureau revient sur denji après 1 seconde !
+```
+
+1. Dans `app/wallpaper/engines/hanabi_engine.py`, la méthode `apply()` exécutait le hot-swap DBus (`setFilePath`). Mais le code contenait :
+   ```python
+   if not hot_swapped:
+       subprocess.run(["gsettings", "set", self.SCHEMA, "video-path", str(p)], check=True)
+   ```
+   Comme `hot_swapped` valait `True`, **la clé GSettings `video-path` n'était jamais mise à jour** et conservait la valeur précédente (`denji-hunter.3840x2160.mp4`).
+2. Pendant ce temps, le démon en arrière-plan `vscode_sync.py` interrogeait GSettings toutes les 200 ms via `_get_hanabi_video_path()`.
+3. Voyant que GSettings indiquait toujours `denji-hunter`, le thread considérait qu'un changement externe venait d'avoir lieu sur le bureau.
+4. `vscode_sync.py` écrasait immédiatement `current_wallpaper.json` avec `denji-hunter` et réappliquait `denji` sur le bureau et dans VS Code.
+
+### 6.3 Solution apportée
+1. **Mise à jour inconditionnelle de GSettings dans `hanabi_engine.py` :**
+   La commande `gsettings set io.github.jeffshee.hanabi-extension video-path <path>` est désormais **toujours exécutée** à chaque changement de fond d'écran (avec fallback `--schemadir`), que le hot-swap DBus ait réussi ou non.
+2. **Neutralisation de l'écho dans `vscode_sync.py` :**
+   Lorsqu'un changement provient de VS Code (`source == "vscode"`), la variable `self._last_written_path` est immédiatement renseignée avec le nouveau chemin pour empêcher `_watch_loop` de réagir à sa propre mise à jour.
+3. **Mise à jour synchrone et rechargement dans `extension.js` :**
+   Dans l'extension VS Code, `updateStateAndApply` exécute `scripts/patch_vscode_html.py` de façon synchrone (`spawnSync`) puis déclenche le rechargement de la fenêtre (`vsHelp.reload()`) pour afficher instantanément le nouveau média.
+   Lorsque le fond change depuis le bureau, une notification interactive propose de recharger la fenêtre en un clic.
+
+---
+
+## 7. Synthèse des composants modifiés et validés
+
+| Composant | Fichier | Rôle de la correction |
+| :--- | :--- | :--- |
+| **Moteur Hanabi** | `app/wallpaper/engines/hanabi_engine.py` | Toujours synchroniser GSettings pour supprimer la boucle de rétroaction. |
+| **Sync Daemon** | `app/automation/vscode_sync.py` | Empêcher l'écho inverse lors d'un changement initié par VS Code. |
+| **Launcher** | `scripts/code-launcher.sh` | Retirer le montage de `preload.js` pour éviter les crashs Electron sandbox. |
+| **Patch HTML** | `scripts/patch_vscode_html.py` | Styles inline stricts sur `<video>`, CSP `connect-src` propre, et nettoyage de `preload.js`. |
+| **Extension VS Code** | `vscode-extension/out/extension.js` | Déploiement version 99.0.0, activation globale, synchronisation `spawnSync` et reload assisté. |
+| **Manifeste Extension** | `vscode-extension/package.json` | Priorisation de `sudo-root-container`, activation globale (`*`) et menus complets. |
+| **GNOME Renderer** | `gnome-extension/.../renderer.js` | Élimination des black frames via `seek(0)` sans destruction de pipeline. |
+| **Gestionnaire Principal** | `app/wallpaper/manager.py` | Restauration prioritaire du fond d'écran Hanabi réel lors du démarrage du démon. |
+
+L'ensemble des fonctionnalités (Live Wallpaper animé, changement dynamique sans réversion, boutons Terminal Admin Sudo Root, et persistance après rechargement) est désormais opérationnel et stabilisé.

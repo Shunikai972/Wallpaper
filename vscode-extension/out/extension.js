@@ -190,10 +190,12 @@ async function activate(context) {
                 // 2. Mise à jour de la configuration de l'extension
                 await wallpaper.updateConfig({ videoPath: filePath, enabled: true });
 
-                // 3. Mise à jour du patch workbench.html
+                // 3. Mise à jour synchrone du patch workbench.html
                 const patchScript = path.join(home, 'reseau/Perso/Bureau/Wallpaper/scripts/patch_vscode_html.py');
                 if (fs.existsSync(patchScript)) {
-                    require('child_process').spawn('python3', [patchScript, filePath], { detached: true, stdio: 'ignore' }).unref();
+                    try {
+                        require('child_process').spawnSync('python3', [patchScript, filePath], { timeout: 3000 });
+                    } catch (e) {}
                 }
 
                 // 4. Extraction dynamique des couleurs si activée
@@ -207,7 +209,10 @@ async function activate(context) {
                     } catch (e) {}
                 }
 
-                vscode_1.default.window.showInformationMessage(`🖼️ Fond d\'écran appliqué et synchronisé avec le bureau : ${path.basename(filePath)}`);
+                await vsHelp_1.vsHelp.reload({
+                    message: `🖼️ Fond d'écran appliqué et synchronisé : ${path.basename(filePath)}`,
+                    btnReload: 'Recharger maintenant'
+                });
             } catch (err) {
                 vscode_1.default.window.showErrorMessage(`Erreur application fond d\'écran : ${err.message}`);
             }
@@ -311,7 +316,9 @@ async function activate(context) {
                         wallpaper.updateConfig({ videoPath: currentDetected, enabled: true }).catch(() => {});
                         const patchScript = path.join(homeDir, 'reseau/Perso/Bureau/Wallpaper/scripts/patch_vscode_html.py');
                         if (fs.existsSync(patchScript)) {
-                            require('child_process').spawn('python3', [patchScript, currentDetected], { detached: true, stdio: 'ignore' }).unref();
+                            try {
+                                require('child_process').spawnSync('python3', [patchScript, currentDetected], { timeout: 3000 });
+                            } catch (e) {}
                         }
                         if (wallpaper.colorEngine) {
                             try {
@@ -322,6 +329,10 @@ async function activate(context) {
                                 }
                             } catch (e) {}
                         }
+                        vsHelp_1.vsHelp.reload({
+                            message: `🖼️ Nouveau fond d'écran détecté depuis le bureau (${path.basename(currentDetected)}). Recharger pour l'afficher ?`,
+                            btnReload: 'Recharger VS Code'
+                        }).catch(() => {});
                     }
                 }
             } catch (err) {}

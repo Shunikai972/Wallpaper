@@ -86,7 +86,16 @@ class HanabiWallpaperEngine(BaseWallpaperEngine):
             if shutil.which("gnome-extensions"):
                 subprocess.run(["gnome-extensions", "enable", self.UUID], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-            # 2. Tenter un hot-swap instantané et sans coupure via DBus si le renderer est actif
+            # 2. Toujours synchroniser la clé GSettings de Hanabi
+            subprocess.run(["gsettings", "set", self.SCHEMA, "video-path", str(p)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            for s_dir in [
+                Path.home() / ".local/share/gnome-shell/extensions/hanabi-extension@jeffshee.github.io/schemas",
+                Path.home() / "reseau/Perso/.local/share/gnome-shell/extensions/hanabi-extension@jeffshee.github.io/schemas"
+            ]:
+                if s_dir.exists():
+                    subprocess.run(["gsettings", "--schemadir", str(s_dir), "set", self.SCHEMA, "video-path", str(p)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+            # 3. Tenter un hot-swap instantané et sans coupure via DBus si le renderer est actif
             hot_swapped = False
             if shutil.which("gdbus"):
                 try:
@@ -101,10 +110,6 @@ class HanabiWallpaperEngine(BaseWallpaperEngine):
                         hot_swapped = True
                 except Exception:
                     pass
-
-            # 3. Si le renderer n'est pas encore lancé sur cette session, configurer GSettings pour le démarrer
-            if not hot_swapped:
-                subprocess.run(["gsettings", "set", self.SCHEMA, "video-path", str(p)], check=True)
 
             self._current_wallpaper = str(p)
             self._is_paused = False

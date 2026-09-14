@@ -176,6 +176,7 @@ class VsCodeSync:
                         if file_path and os.path.exists(file_path):
                             logger.info("Changement de wallpaper initié depuis VS Code : %s", file_path)
                             self._is_applying_from_vscode = True
+                            self._last_written_path = file_path
                             try:
                                 from app.wallpaper.manager import wallpaper_manager
                                 wallpaper_manager.apply_wallpaper_by_path(file_path)
