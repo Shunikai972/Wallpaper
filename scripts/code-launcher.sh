@@ -41,14 +41,28 @@ export LD_LIBRARY_PATH="$HOME/.local/lib:$HOME/reseau/Perso/.local/lib:${LD_LIBR
 # 3. Synchronisation automatique des extensions (locale + tmp)
 mkdir -p "$HOME/.vscode/extensions" /var/tmp/visual_extensions 2>/dev/null || true
 
-# Si le dépôt Wallpaper contient l'extension, s'assurer qu'elle est déployée
+# Nettoyage des versions tierces marketplace (1.1.*) et de l'obsolescence forcée
+rm -rf /var/tmp/visual_extensions/budicuy.live-wallpaper-1.1.* 2>/dev/null || true
+rm -rf /var/tmp/visual_extensions/budicuy.live-wallpaper-1.0.* 2>/dev/null || true
+rm -rf "$HOME/.vscode/extensions"/budicuy.live-wallpaper-1.1.* 2>/dev/null || true
+rm -rf "$HOME/.vscode/extensions"/budicuy.live-wallpaper-1.0.* 2>/dev/null || true
+rm -rf "$HOME/reseau/Perso/.vscode/extensions"/budicuy.live-wallpaper-1.1.* 2>/dev/null || true
+rm -rf "$HOME/reseau/Perso/.vscode/extensions"/budicuy.live-wallpaper-1.0.* 2>/dev/null || true
+
+if [ -f /var/tmp/visual_extensions/.obsolete ]; then
+    sed -i 's/"budicuy\.live-wallpaper-[^"]*":true,//g; s/,"budicuy\.live-wallpaper-[^"]*":true//g; s/"budicuy\.live-wallpaper-[^"]*":true//g' /var/tmp/visual_extensions/.obsolete 2>/dev/null || true
+fi
+
+# Déploiement de notre extension personnalisée (version 99.0.0)
 if [ -n "$WP_DIR" ] && [ -d "$WP_DIR/vscode-extension" ]; then
-    mkdir -p "$HOME/.vscode/extensions/budicuy.live-wallpaper-1.0.9"
-    cp -rf "$WP_DIR/vscode-extension"/* "$HOME/.vscode/extensions/budicuy.live-wallpaper-1.0.9/" 2>/dev/null || true
+    mkdir -p "$HOME/.vscode/extensions/budicuy.live-wallpaper-99.0.0"
+    cp -rf "$WP_DIR/vscode-extension"/* "$HOME/.vscode/extensions/budicuy.live-wallpaper-99.0.0/" 2>/dev/null || true
     if [ -d "$HOME/reseau/Perso/.vscode/extensions" ]; then
-        mkdir -p "$HOME/reseau/Perso/.vscode/extensions/budicuy.live-wallpaper-1.0.9"
-        cp -rf "$WP_DIR/vscode-extension"/* "$HOME/reseau/Perso/.vscode/extensions/budicuy.live-wallpaper-1.0.9/" 2>/dev/null || true
+        mkdir -p "$HOME/reseau/Perso/.vscode/extensions/budicuy.live-wallpaper-99.0.0"
+        cp -rf "$WP_DIR/vscode-extension"/* "$HOME/reseau/Perso/.vscode/extensions/budicuy.live-wallpaper-99.0.0/" 2>/dev/null || true
     fi
+    mkdir -p /var/tmp/visual_extensions/budicuy.live-wallpaper-99.0.0
+    cp -rf "$WP_DIR/vscode-extension"/* /var/tmp/visual_extensions/budicuy.live-wallpaper-99.0.0/ 2>/dev/null || true
 fi
 
 # Synchroniser toutes les extensions vers /var/tmp/visual_extensions

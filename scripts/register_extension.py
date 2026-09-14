@@ -13,18 +13,18 @@ def register():
 
     lw_entry = {
         'identifier': {'id': 'budicuy.live-wallpaper'},
-        'version': '1.0.9',
+        'version': '99.0.0',
         'location': {
             '$mid': 1,
-            'fsPath': '/var/tmp/visual_extensions/budicuy.live-wallpaper-1.0.9',
-            'external': 'file:///var/tmp/visual_extensions/budicuy.live-wallpaper-1.0.9',
-            'path': '/var/tmp/visual_extensions/budicuy.live-wallpaper-1.0.9',
+            'fsPath': '/var/tmp/visual_extensions/budicuy.live-wallpaper-99.0.0',
+            'external': 'file:///var/tmp/visual_extensions/budicuy.live-wallpaper-99.0.0',
+            'path': '/var/tmp/visual_extensions/budicuy.live-wallpaper-99.0.0',
             'scheme': 'file'
         },
-        'relativeLocation': 'budicuy.live-wallpaper-1.0.9',
+        'relativeLocation': 'budicuy.live-wallpaper-99.0.0',
         'metadata': {
             'installedTimestamp': 1788946167367,
-            'pinned': False,
+            'pinned': True,
             'source': 'custom',
             'publisherDisplayName': 'budicuy',
             'targetPlatform': 'undefined',
@@ -43,7 +43,7 @@ def register():
                 except Exception:
                     exts = []
             exts = [e for e in exts if e.get('identifier', {}).get('id') != 'budicuy.live-wallpaper']
-            target_ext_dir = str(t.parent / 'budicuy.live-wallpaper-1.0.9')
+            target_ext_dir = str(t.parent / 'budicuy.live-wallpaper-99.0.0')
             entry = dict(lw_entry)
             entry['location'] = {
                 '$mid': 1,

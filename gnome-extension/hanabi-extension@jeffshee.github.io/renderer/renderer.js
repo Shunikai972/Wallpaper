@@ -430,30 +430,12 @@ var HanabiRenderer = GObject.registerClass(
         this.setMute(mute);
         this.maybeSeekRandomMedia();
       });
-    }
-    recreateMedia() {
-      if (!this.currentFile)
-        return;
-      if (this.media) {
-        try {
-          this.media.pause();
-          this.media.set_file(null);
-        } catch (e) {}
-      }
-      this.media = Gtk.MediaFile.new_for_file(this.currentFile);
-      this.media.set({ loop: false, playing: true });
-      this.connectMediaSignals(this.media);
-      this.setVolume(volume);
-      this.setMute(mute);
-      this.pictures.forEach((p) => p.set_paintable(this.media));
-      this.sharedPaintable = this.media;
-      this.playing = true;
-      if (this.dbus) {
-        this.dbus.emit_signal(
-          "isPlayingChanged",
-          new GLib.Variant("(b)", [true])
-        );
-      }
+      media.connect("notify::ended", (m) => {
+        if (m.get_ended()) {
+          m.seek(0);
+          m.play();
+        }
+      });
     }
     getGtkStockWidget() {
       this.gstImplName = "GtkMediaFile";
@@ -466,20 +448,15 @@ var HanabiRenderer = GObject.registerClass(
       }
       this.media.set({ loop: false, playing: true });
       this.connectMediaSignals(this.media);
-      this.isRecreating = false;
-      GLib.timeout_add(GLib.PRIORITY_DEFAULT, 150, () => {
-        if (!this.media || this.isRecreating || !this.currentFile)
+      GLib.timeout_add(GLib.PRIORITY_DEFAULT, 100, () => {
+        if (!this.media || !this.currentFile)
           return true;
         const ts = this.media.get_timestamp();
         const dur = this.media.get_duration();
         const ended = this.media.get_ended();
-        if (dur > 0 && (ts >= dur - 250000 || ended)) {
-          this.isRecreating = true;
-          this.recreateMedia();
-          GLib.timeout_add(GLib.PRIORITY_DEFAULT, 350, () => {
-            this.isRecreating = false;
-            return false;
-          });
+        if (dur > 0 && (ended || ts >= dur - 100000)) {
+          this.media.seek(0);
+          this.media.play();
         }
         return true;
       });
@@ -590,8 +567,25 @@ var HanabiRenderer = GObject.registerClass(
         this.markRandomStartPending();
         this.setPlay();
       } else if (this.media) {
-        this.recreateMedia();
-        this.markRandomStartPending();
+        const newMedia = Gtk.MediaFile.new_for_file(this.currentFile);
+        newMedia.set({ loop: false, playing: true });
+        this.connectMediaSignals(newMedia);
+        newMedia.connect("notify::prepared", () => {
+          this.pictures.forEach((p) => p.set_paintable(newMedia));
+          const oldMedia = this.media;
+          this.media = newMedia;
+          this.sharedPaintable = newMedia;
+          this.playing = true;
+          this.setVolume(volume);
+          this.setMute(mute);
+          this.markRandomStartPending();
+          if (oldMedia) {
+            try { oldMedia.pause(); } catch(e) {}
+          }
+          if (this.dbus) {
+            this.dbus.emit_signal("isPlayingChanged", new GLib.Variant("(b)", [true]));
+          }
+        });
       }
     }
     setPlay() {

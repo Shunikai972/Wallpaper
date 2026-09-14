@@ -110,15 +110,12 @@ class AbsPatchFile {
             return true;
         }
         catch (e) {
-            if (!vsc_1.vsc) {
-                return false;
-            }
             const msg = e instanceof Error ? e.message : String(e);
             // Si le système de fichiers est monté en lecture seule (EROFS) ou /usr sysext
             if (e.code === 'EROFS' || msg.includes('read-only') || filePath.startsWith('/usr/')) {
-                vsc_1.vsc.window.showInformationMessage(
-                    `Live Wallpaper : L'installation de VS Code est en lecture seule (${e.code || 'EROFS'}). Le mode officiel sans modification de fichiers système est actif (couleurs dynamiques et lecteur Webview opérationnels).`
-                );
+                return false;
+            }
+            if (!vsc_1.vsc) {
                 return false;
             }
             const retry = 'Retry with Admin / Sudo';

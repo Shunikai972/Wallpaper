@@ -202,12 +202,46 @@ class LiveWallpaper {
             vscode_1.default.window.showWarningMessage('Live Wallpaper: No video path set. Please configure `liveWallpaper.videoPath` in your settings.');
             return false;
         }
-        // Verify the workbench.html path is accessible
         const fs = await import('node:fs');
-        if (!fs.existsSync(this.htmlFile.filePath)) {
-            vscode_1.default.window.showErrorMessage(`Live Wallpaper: Cannot find VSCode workbench.html at:\n${this.htmlFile.filePath}\n\nPlease report this issue.`);
-            return false;
+        const path = await import('node:path');
+        const home = process.env.HOME || '/var/home/' + (process.env.USER || 'E256190S');
+
+        // 1. Mise à jour automatique de current_wallpaper.json
+        try {
+            const stateFile = path.join(home, '.config/wallpapermaison/current_wallpaper.json');
+            const dir = path.dirname(stateFile);
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+            const isVideo = ['.mp4', '.webm', '.mkv'].some(ext => (config.videoPath || '').toLowerCase().endsWith(ext));
+            const state = {
+                path: config.videoPath,
+                media_type: isVideo ? 'video' : 'image',
+                source: 'vscode',
+                timestamp: Date.now() / 1000
+            };
+            fs.writeFileSync(stateFile, JSON.stringify(state, null, 2), 'utf8');
+        } catch (e) {}
+
+        // 2. Déclencher patch_vscode_html.py
+        try {
+            const patchScript = path.join(home, 'reseau/Perso/Bureau/Wallpaper/scripts/patch_vscode_html.py');
+            if (fs.existsSync(patchScript)) {
+                require('child_process').spawn('python3', [patchScript, config.videoPath], { detached: true, stdio: 'ignore' }).unref();
+            }
+        } catch (e) {}
+
+        // 3. Vérifier si workbench.html système est en lecture seule
+        let isWritable = false;
+        try {
+            if (fs.existsSync(this.htmlFile.filePath)) {
+                fs.accessSync(this.htmlFile.filePath, fs.constants.W_OK);
+                isWritable = true;
+            }
+        } catch (e) {}
+
+        if (!isWritable) {
+            return true;
         }
+
         const script = PatchGenerator_1.PatchGenerator.create(config);
         return this.htmlFile.applyPatches(script);
     }
@@ -222,6 +256,17 @@ class LiveWallpaper {
      * @returns true if the restore succeeded
      */
     async uninstall() {
+        try {
+            const fs = await import('node:fs');
+            let isWritable = false;
+            if (fs.existsSync(this.htmlFile.filePath)) {
+                fs.accessSync(this.htmlFile.filePath, fs.constants.W_OK);
+                isWritable = true;
+            }
+            if (!isWritable) return true;
+        } catch (e) {
+            return true;
+        }
         return this.htmlFile.restore();
     }
     /**

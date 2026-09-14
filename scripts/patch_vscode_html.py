@@ -106,6 +106,82 @@ def patch_workbench(video_path: str = None) -> bool:
         pointer-events: none !important;
         display: block !important;
     }}
+
+    /* Bouton SUDO : Intégration native dans la Barre d'Activité latérale */
+    .part.activitybar .action-item.sudo-root-item {{
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        width: 48px !important;
+        height: 48px !important;
+        cursor: pointer !important;
+        position: relative !important;
+        margin: 2px 0 !important;
+        user-select: none !important;
+    }}
+
+    .part.activitybar .action-item.sudo-root-item a.action-label {{
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        width: 38px !important;
+        height: 38px !important;
+        border-radius: 6px !important;
+        transition: background-color 0.15s ease, transform 0.1s ease !important;
+    }}
+
+    .part.activitybar .action-item.sudo-root-item:hover a.action-label {{
+        background-color: rgba(239, 68, 68, 0.2) !important;
+        transform: scale(1.06) !important;
+    }}
+
+    .part.activitybar .action-item.sudo-root-item:hover svg {{
+        filter: drop-shadow(0 0 8px rgba(239, 68, 68, 0.8)) !important;
+    }}
+
+    .part.activitybar .action-item.sudo-root-item:active a.action-label {{
+        transform: scale(0.92) !important;
+    }}
+
+    /* Indicateur latéral d'activation comme les icônes officielles VS Code */
+    .part.activitybar .action-item.sudo-root-item::before {{
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 10px;
+        height: 28px;
+        width: 2px;
+        background-color: #ef4444;
+        opacity: 0;
+        transition: opacity 0.2s ease;
+    }}
+
+    .part.activitybar .action-item.sudo-root-item:hover::before {{
+        opacity: 1;
+    }}
+
+    /* Bouton flottant temporaire de secours si la barre tarde à s'afficher */
+    #vsc-sudo-action-btn-fallback {{
+        position: fixed;
+        bottom: 60px;
+        left: 6px;
+        width: 36px;
+        height: 36px;
+        z-index: 100000;
+        background: rgba(239, 68, 68, 0.25);
+        border: 1px solid #ef4444;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        box-shadow: 0 4px 12px rgba(239, 68, 68, 0.5);
+        transition: transform 0.15s ease;
+    }}
+    #vsc-sudo-action-btn-fallback:hover {{
+        transform: scale(1.1);
+        background: rgba(239, 68, 68, 0.4);
+    }}
 </style>
 
 <script>
@@ -187,6 +263,103 @@ def patch_workbench(video_path: str = None) -> bool:
         }}
     }}
 
+    function openSudoTerminal(e) {{
+        if (e) {{ e.preventDefault(); e.stopPropagation(); }}
+        console.log("[WallpaperMaison] Déclenchement du Terminal Sudo Root...");
+
+        // 1. Déclenchement direct via runCommand (injecté dans preload.js)
+        if (window.vscode && typeof window.vscode.runCommand === 'function') {{
+            window.vscode.runCommand('liveWallpaper.openSudoTerminal');
+            return;
+        }}
+
+        // 2. Déclenchement via ipcRenderer emit
+        if (window.vscode && window.vscode.ipcRenderer && typeof window.vscode.ipcRenderer.emit === 'function') {{
+            window.vscode.ipcRenderer.emit('vscode:runAction', {{}}, {{ id: 'liveWallpaper.openSudoTerminal', from: 'button', args: [] }});
+            return;
+        }}
+
+        // 3. Déclenchement via DOM (item terminal ou bouton statusbar)
+        var candidates = [
+            document.getElementById('sudoRootStatusItem'),
+            document.querySelector('[id*="sudoRoot"]'),
+            document.querySelector('.statusbar-item[aria-label*="Sudo"]'),
+            document.querySelector('.statusbar-item[aria-label*="Root"]'),
+            document.querySelector('.action-item [aria-label*="Terminal"]'),
+            document.querySelector('.panel [aria-label*="Terminal"]')
+        ];
+        for (var i = 0; i < candidates.length; i++) {{
+            if (candidates[i]) {{
+                candidates[i].click();
+                return;
+            }}
+        }}
+
+        // 4. Fallback runCommand terminal classique
+        if (window.vscode && typeof window.vscode.runCommand === 'function') {{
+            window.vscode.runCommand('workbench.action.terminal.new');
+            return;
+        }}
+    }}
+
+    function injectSudoButton() {{
+        var existingNative = document.getElementById('sudo-root-activity-action');
+        var activityContainer = document.querySelector('.part.activitybar .composite-bar ul.actions-container') ||
+                                document.querySelector('.part.activitybar ul.actions-container') ||
+                                document.querySelector('.part.activitybar [role="toolbar"] ul') ||
+                                document.querySelector('.activitybar .monaco-action-bar ul');
+
+        if (existingNative) return;
+
+        var li = document.createElement('li');
+        li.className = 'action-item sudo-root-item';
+        li.id = 'sudo-root-activity-action';
+        li.setAttribute('role', 'tab');
+        li.setAttribute('tabindex', '0');
+
+        var a = document.createElement('a');
+        a.className = 'action-label';
+        a.setAttribute('role', 'button');
+        a.setAttribute('aria-label', '⚡ Sudo Root : Ouvrir le Terminal Administrateur Root');
+        a.title = '⚡ Sudo Root : Ouvrir le Terminal Administrateur Root (Sans mot de passe)';
+
+        // Création SVG 100% conforme sans innerHTML pour contourner TrustedTypes
+        var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('width', '22');
+        svg.setAttribute('height', '22');
+        svg.setAttribute('fill', 'none');
+        svg.setAttribute('stroke', '#ef4444');
+        svg.setAttribute('stroke-width', '1.8');
+        svg.setAttribute('stroke-linecap', 'round');
+        svg.setAttribute('stroke-linejoin', 'round');
+
+        var p1 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        p1.setAttribute('d', 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z');
+        svg.appendChild(p1);
+
+        var p2 = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+        p2.setAttribute('points', '13 7 8 13 12 13 11 17 16 11 12 11 13 7');
+        p2.setAttribute('fill', '#ef4444');
+        svg.appendChild(p2);
+
+        a.appendChild(svg);
+        li.appendChild(a);
+        li.onclick = openSudoTerminal;
+        a.onclick = openSudoTerminal;
+
+        if (activityContainer) {{
+            var oldFb = document.getElementById('vsc-sudo-action-btn-fallback');
+            if (oldFb) oldFb.remove();
+            activityContainer.appendChild(li);
+        }} else {{
+            if (!document.getElementById('vsc-sudo-action-btn-fallback')) {{
+                li.id = 'vsc-sudo-action-btn-fallback';
+                document.body.appendChild(li);
+            }}
+        }}
+    }}
+
     function startLiveSyncWatcher() {{
         function applyState(raw) {{
             try {{
@@ -246,7 +419,20 @@ def patch_workbench(video_path: str = None) -> bool:
 
     function init() {{
         ensureMedia();
+        injectSudoButton();
         startLiveSyncWatcher();
+
+        // Observation dynamique pour réinsérer le bouton Sudo dès l'apparition de l'Activity Bar
+        var observer = new MutationObserver(function() {{
+            var act = document.querySelector('.part.activitybar ul.actions-container') ||
+                      document.querySelector('.part.activitybar .composite-bar ul.actions-container') ||
+                      document.querySelector('.part.activitybar [role="toolbar"] ul') ||
+                      document.querySelector('.activitybar .monaco-action-bar ul');
+            if (act && (!document.getElementById('sudo-root-activity-action') || document.getElementById('vsc-sudo-action-btn-fallback'))) {{
+                injectSudoButton();
+            }}
+        }});
+        observer.observe(document.body, {{ childList: true, subtree: true }});
 
         setInterval(ensureMedia, 500);
         window.addEventListener('focus', ensureMedia);

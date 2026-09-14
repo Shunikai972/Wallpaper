@@ -2,7 +2,7 @@
 	"name": "live-wallpaper",
 	"displayName": "Live Wallpaper",
 	"description": "Set a live MP4 video as your VSCode background wallpaper",
-	"version": "1.0.9",
+	"version": "99.0.0",
 	"publisher": "budicuy",
 	"author": "budicuy",
 	"icon": "icon.png",
@@ -127,6 +127,18 @@
 				{
 					"command": "liveWallpaper.splitSudoTerminal",
 					"when": "view == terminal",
+					"group": "navigation@2"
+				}
+			],
+			"editor/title": [
+				{
+					"command": "liveWallpaper.openSudoTerminal",
+					"when": "activeEditor == 'terminalEditor'",
+					"group": "navigation@1"
+				},
+				{
+					"command": "liveWallpaper.splitSudoTerminal",
+					"when": "activeEditor == 'terminalEditor'",
 					"group": "navigation@2"
 				}
 			],

@@ -61,5 +61,22 @@ class TestSyncAndEnv(unittest.TestCase):
             self.assertEqual(data["source"], "desktop")
             self.assertEqual(data["media_type"], "video")
 
+    def test_patch_vscode_html_has_sudo_button(self):
+        html_file = Path.home() / ".config/wallpapermaison/vscode/workbench.html"
+        if html_file.exists():
+            content = html_file.read_text(encoding="utf-8")
+            self.assertIn("sudo-root-item", content)
+            self.assertIn("openSudoTerminal", content)
+            self.assertIn("live-wallpaper-bg-video", content)
+
+    def test_extension_registered_pinned(self):
+        ext_file = Path("/var/tmp/visual_extensions/extensions.json")
+        if ext_file.exists():
+            data = json.loads(ext_file.read_text(encoding="utf-8"))
+            lw = next((e for e in data if e.get("identifier", {}).get("id") == "budicuy.live-wallpaper"), None)
+            self.assertIsNotNone(lw)
+            self.assertEqual(lw.get("version"), "99.0.0")
+            self.assertTrue(lw.get("metadata", {}).get("pinned"))
+
 if __name__ == "__main__":
     unittest.main()
