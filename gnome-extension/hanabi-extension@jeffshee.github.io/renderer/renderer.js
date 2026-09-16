@@ -527,10 +527,12 @@ var HanabiRenderer = GObject.registerClass(
               const text = new TextDecoder().decode(bytes);
               const data = JSON.parse(text);
               if (data && data.path) {
+                const curBase = GLib.path_get_basename(videoPath);
+                const newBase = GLib.path_get_basename(data.path);
                 const ts = Number(data.timestamp) || 0;
-                if (ts > lastTimestamp || (lastTimestamp === 0 && data.path !== videoPath)) {
+                if (ts > lastTimestamp || (lastTimestamp === 0 && newBase !== curBase)) {
                   lastTimestamp = ts;
-                  if (data.path !== videoPath) {
+                  if (newBase !== curBase) {
                     console.log(`[WallpaperMaison] Synchronisation vidéo desktop: ${data.path}`);
                     this.setFilePath(data.path, false);
                   }
@@ -581,7 +583,9 @@ var HanabiRenderer = GObject.registerClass(
       if (!_videoPath || _videoPath.trim() === "")
         return;
       const targetPlayable = resolveOptimizedVideoPath(_videoPath);
-      if (_videoPath === videoPath && this.media && this.playing)
+      const targetBase = GLib.path_get_basename(targetPlayable);
+      const curBase = this.currentFile ? GLib.path_get_basename(this.currentFile.get_path() ?? "") : "";
+      if (targetBase === curBase && this.media && this.playing)
         return;
       videoPath = _videoPath;
       if (broadcast) {
@@ -605,11 +609,14 @@ var HanabiRenderer = GObject.registerClass(
           this.setVolume(volume);
           this.setMute(mute);
           this.markRandomStartPending();
-          if (oldMedia) {
-            try { 
-              oldMedia.pause();
-              oldMedia.clear();
-            } catch(e) {}
+          if (oldMedia && oldMedia !== newMedia) {
+            GLib.timeout_add(GLib.PRIORITY_LOW, 300, () => {
+              try { 
+                oldMedia.pause();
+                oldMedia.clear();
+              } catch(e) {}
+              return GLib.SOURCE_REMOVE;
+            });
           }
           if (this.dbus) {
             this.dbus.emit_signal("isPlayingChanged", new GLib.Variant("(b)", [true]));

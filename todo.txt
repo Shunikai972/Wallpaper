@@ -1,0 +1,4 @@
+1) fixe les bugs de performance
+2) actuellement le fond d'écran linux freeze, et c'est pas la premiere fois. Fix tout les problemes de synchro entre vs code et ce putain d'arriere plan linux
+3) dans vs code quand on change de wallpaper, adapter la police d'écriture, sinon sur certaines polices on ne voit RIEN
+4) parfois coupure sur vscode de con, ça bug et ça se coupe ça retourne sur le truc normal.

@@ -40,9 +40,13 @@ class ThemeSynchronizer {
             "editor.foreground": palette.editorForeground,
             "editorCursor.foreground": palette.cursor,
             "editor.selectionBackground": palette.selection,
-            "editor.lineHighlightBackground": palette.activeTabBackground + "33",
-            "editorLineNumber.foreground": palette.mutedForeground + "77",
+            "editor.lineHighlightBackground": "#ffffff0d",
+            "editorLineNumber.foreground": palette.mutedForeground,
             "editorLineNumber.activeForeground": palette.editorForeground,
+            "editorIndentGuide.background": "#ffffff1a",
+            "editorIndentGuide.activeBackground": palette.accent + "88",
+            "editorBracketMatch.background": palette.accent + "33",
+            "editorBracketMatch.border": palette.accent,
 
             "activityBar.background": palette.sidebarBackground,
             "activityBar.foreground": palette.editorForeground,
@@ -86,31 +90,145 @@ class ThemeSynchronizer {
     buildTokenColors(palette, mode = "full") {
         if (mode === "accent-only") return null;
 
+        const tokens = palette.tokens || {
+            keyword: palette.accent,
+            function: palette.cursor,
+            string: palette.secondary,
+            number: palette.secondary,
+            type: palette.accent,
+            variable: palette.editorForeground,
+            property: palette.secondary,
+            comment: palette.mutedForeground,
+            operator: palette.editorForeground,
+            constant: palette.secondary,
+            tag: palette.accent
+        };
+
         return {
             "textMateRules": [
                 {
-                    "scope": ["comment", "punctuation.definition.comment"],
-                    "settings": { "foreground": palette.mutedForeground }
+                    "name": "Comments",
+                    "scope": [
+                        "comment",
+                        "comment.line",
+                        "comment.block",
+                        "punctuation.definition.comment",
+                        "comment.block.documentation"
+                    ],
+                    "settings": { "foreground": tokens.comment, "fontStyle": "italic" }
                 },
                 {
-                    "scope": ["keyword", "storage.type", "storage.modifier"],
-                    "settings": { "foreground": palette.accent, "fontStyle": "bold" }
+                    "name": "Keywords and Storage",
+                    "scope": [
+                        "keyword",
+                        "keyword.control",
+                        "keyword.control.conditional",
+                        "keyword.control.loop",
+                        "keyword.control.flow",
+                        "storage",
+                        "storage.type",
+                        "storage.modifier",
+                        "keyword.operator.new",
+                        "keyword.operator.expression"
+                    ],
+                    "settings": { "foreground": tokens.keyword, "fontStyle": "bold" }
                 },
                 {
-                    "scope": ["string", "string.quoted"],
-                    "settings": { "foreground": palette.secondary }
+                    "name": "Functions and Methods",
+                    "scope": [
+                        "entity.name.function",
+                        "support.function",
+                        "entity.name.method",
+                        "meta.function-call",
+                        "variable.function"
+                    ],
+                    "settings": { "foreground": tokens.function, "fontStyle": "bold" }
                 },
                 {
-                    "scope": ["entity.name.function", "support.function"],
-                    "settings": { "foreground": palette.cursor }
+                    "name": "Strings and Templates",
+                    "scope": [
+                        "string",
+                        "string.quoted",
+                        "string.quoted.single",
+                        "string.quoted.double",
+                        "string.template",
+                        "string.interpolated",
+                        "punctuation.definition.string"
+                    ],
+                    "settings": { "foreground": tokens.string }
                 },
                 {
-                    "scope": ["constant.numeric", "constant.language"],
-                    "settings": { "foreground": palette.secondary }
+                    "name": "Numbers and Numeric Constants",
+                    "scope": [
+                        "constant.numeric",
+                        "constant.numeric.integer",
+                        "constant.numeric.float",
+                        "constant.numeric.hex"
+                    ],
+                    "settings": { "foreground": tokens.number, "fontStyle": "bold" }
                 },
                 {
-                    "scope": ["entity.name.type", "support.type"],
-                    "settings": { "foreground": palette.accent }
+                    "name": "Constants and Language Builtins",
+                    "scope": [
+                        "constant.language",
+                        "constant.other",
+                        "support.constant",
+                        "constant.language.boolean"
+                    ],
+                    "settings": { "foreground": tokens.constant, "fontStyle": "bold" }
+                },
+                {
+                    "name": "Types, Classes and Interfaces",
+                    "scope": [
+                        "entity.name.type",
+                        "entity.name.class",
+                        "entity.name.struct",
+                        "entity.name.interface",
+                        "support.type",
+                        "support.class",
+                        "entity.other.inherited-class"
+                    ],
+                    "settings": { "foreground": tokens.type, "fontStyle": "bold" }
+                },
+                {
+                    "name": "Variables and Parameters",
+                    "scope": [
+                        "variable",
+                        "variable.other",
+                        "variable.parameter",
+                        "variable.language.this",
+                        "variable.language.special"
+                    ],
+                    "settings": { "foreground": tokens.variable }
+                },
+                {
+                    "name": "Properties and Object Keys",
+                    "scope": [
+                        "variable.other.property",
+                        "variable.other.object.property",
+                        "support.type.property-name",
+                        "meta.object-literal.key"
+                    ],
+                    "settings": { "foreground": tokens.property }
+                },
+                {
+                    "name": "HTML/XML Tags and Attributes",
+                    "scope": [
+                        "entity.name.tag",
+                        "entity.other.attribute-name"
+                    ],
+                    "settings": { "foreground": tokens.tag }
+                },
+                {
+                    "name": "Operators and Punctuation",
+                    "scope": [
+                        "keyword.operator",
+                        "keyword.operator.assignment",
+                        "keyword.operator.comparison",
+                        "punctuation.separator",
+                        "punctuation.terminator"
+                    ],
+                    "settings": { "foreground": tokens.operator }
                 }
             ]
         };

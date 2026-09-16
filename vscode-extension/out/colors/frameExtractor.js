@@ -13,14 +13,26 @@ class FrameExtractor {
     }
 
     detectFfmpeg() {
-        // 1. Wrapper local haute fidélité
+        // 1. Système hôte direct (ultra-rapide, zéro overhead Flatpak/bwrap)
+        try {
+            const sysFfmpeg = '/usr/bin/ffmpeg';
+            if (node_fs.existsSync(sysFfmpeg)) {
+                return { cmd: sysFfmpeg, prefixArgs: [] };
+            }
+            const check = node_child_process.spawnSync('which', ['ffmpeg'], { stdio: 'ignore' });
+            if (check.status === 0) {
+                return { cmd: 'ffmpeg', prefixArgs: [] };
+            }
+        } catch {}
+
+        // 2. Wrapper local haute fidélité
         const homeDir = process.env.HOME || '';
         const userFfmpeg = node_path.join(homeDir, '.local/bin/ffmpeg-full');
         if (node_fs.existsSync(userFfmpeg)) {
             return { cmd: userFfmpeg, prefixArgs: [] };
         }
 
-        // 2. Flatpak MPV avec codecs propriétaires
+        // 3. Flatpak MPV avec codecs propriétaires
         try {
             const check = node_child_process.spawnSync('flatpak', ['info', 'io.mpv.Mpv'], { stdio: 'ignore' });
             if (check.status === 0) {
@@ -31,7 +43,7 @@ class FrameExtractor {
             }
         } catch {}
 
-        // 3. Flatpak Celluloid
+        // 4. Flatpak Celluloid
         try {
             const check = node_child_process.spawnSync('flatpak', ['info', 'io.github.celluloid_player.Celluloid'], { stdio: 'ignore' });
             if (check.status === 0) {
@@ -42,7 +54,7 @@ class FrameExtractor {
             }
         } catch {}
 
-        // 4. Système
+        // 5. Fallback système
         return { cmd: 'ffmpeg', prefixArgs: [] };
     }
 

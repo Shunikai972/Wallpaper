@@ -92,6 +92,7 @@ class TemporalSmoother {
             statusBarBackground: colorimetry_1.Colorimetry.rgbToHex(...newDom),
             statusBarForeground: colorimetry_1.Colorimetry.rgbToHex(...colorimetry_1.Colorimetry.ensureContrast([255, 255, 255], newDom, 4.5)),
             contrastRatio: colorimetry_1.Colorimetry.contrastRatio(newFg, newDarkBg),
+            tokens: targetPalette.tokens || this.currentPalette?.tokens,
             raw: {
                 dominant: newDom,
                 secondary: newSec,

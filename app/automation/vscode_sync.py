@@ -178,9 +178,12 @@ class VsCodeSync:
             # 1. Vérification si Hanabi a changé de wallpaper directement sur le bureau
             try:
                 hanabi_val = self._get_hanabi_video_path()
-                if hanabi_val and hanabi_val != self._last_written_path:
-                    logger.info("Changement de fond d'écran détecté depuis Hanabi bureau : %s", hanabi_val)
-                    self.publish_state(hanabi_val, media_type="video", source="desktop")
+                if hanabi_val:
+                    hanabi_base = os.path.basename(hanabi_val)
+                    last_base = os.path.basename(self._last_written_path) if self._last_written_path else ""
+                    if hanabi_base != last_base:
+                        logger.info("Changement de fond d'écran détecté depuis Hanabi bureau : %s", hanabi_val)
+                        self.publish_state(hanabi_val, media_type="video", source="desktop")
             except Exception as e:
                 logger.debug("Erreur surveillance GSettings Hanabi: %s", e)
 

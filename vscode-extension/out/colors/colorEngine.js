@@ -131,11 +131,16 @@ class ColorEngine {
             }
 
             // Détection de changement de fond d'écran
-            if (currentMedia !== this.activeMediaFile) {
+            const mediaChanged = currentMedia !== this.activeMediaFile;
+            if (mediaChanged) {
                 this.activeMediaFile = currentMedia;
                 this.currentVideoTime = 0.0;
                 force = true;
                 this.log(`Changement de fond détecté -> ${currentMedia}`);
+            } else if (!force && (cfg.mode === "auto" || cfg.mode === "static")) {
+                // En mode auto ou static, si le fond n'a pas changé, éviter les extractions ffmpeg redondantes
+                this.isProcessing = false;
+                return;
             }
 
             const [resW, resH] = cfg.analysisResolution.split('x').map(n => parseInt(n) || 80);

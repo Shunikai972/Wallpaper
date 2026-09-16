@@ -182,8 +182,23 @@ def patch_workbench(video_path: str = None) -> bool:
         opacity: 0.75 !important;
     }}
 
-    /* Vidéo ou Image de fond : superposition transparente permanente */
-    #live-wallpaper-bg-video, #live-wallpaper-bg-img {{
+    /* Le conteneur principal de l'éditeur doit être au-dessus du fond vidéo */
+    .monaco-workbench {{
+        position: relative !important;
+        z-index: 1 !important;
+    }}
+
+    /* Amélioration absolue de la lisibilité des lignes de code */
+    .monaco-editor .view-lines {{
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 1px rgba(0, 0, 0, 0.95) !important;
+    }}
+    .monaco-editor .lines-content {{
+        background-color: rgba(13, 17, 23, 0.40) !important;
+        border-radius: 4px !important;
+    }}
+
+    /* Vidéo ou Image de fond : calque d'arrière-plan fluide (z-index 0 pour ne pas superposer le texte) */
+    #live-wallpaper-bg-video, #live-wallpaper-bg-img, .live-wallpaper-media {{
         position: fixed !important;
         top: 0 !important;
         left: 0 !important;
@@ -191,9 +206,10 @@ def patch_workbench(video_path: str = None) -> bool:
         height: 100vh !important;
         object-fit: cover !important;
         opacity: 0.35 !important;
-        z-index: 999 !important;
+        z-index: 0 !important;
         pointer-events: none !important;
         display: block !important;
+        transition: opacity 0.3s ease-in-out !important;
     }}
 
     /* Bouton SUDO : Intégration native dans la Barre d'Activité latérale */
@@ -280,6 +296,12 @@ def patch_workbench(video_path: str = None) -> bool:
     var currentMediaSrc = {repr(vsc_url)};
     var currentRawPath = {repr(str(resolved_video_path))};
 
+    function getBasename(p) {{
+        if (!p) return '';
+        var clean = p.split('?')[0].split('#')[0];
+        return clean.substring(clean.lastIndexOf('/') + 1);
+    }}
+
     function isVideoSrc(src) {{
         if (!src) return true;
         var clean = src.split('?')[0].toLowerCase();
@@ -299,7 +321,8 @@ def patch_workbench(video_path: str = None) -> bool:
         var oldVid = document.getElementById(LW_VIDEO_ID);
         var oldImg = document.getElementById(LW_IMG_ID);
 
-        if (currentRawPath === rawSrc && (oldVid || oldImg)) {{
+        // Si le même fond est déjà actif et en cours de lecture, ne rien recharger
+        if ((currentRawPath === rawSrc || getBasename(currentRawPath) === getBasename(rawSrc)) && (oldVid || oldImg)) {{
             if (oldVid && oldVid.paused) {{
                 oldVid.play().catch(function() {{}});
             }}
@@ -309,9 +332,7 @@ def patch_workbench(video_path: str = None) -> bool:
         currentMediaSrc = src;
         currentRawPath = rawSrc;
 
-        if (oldVid) oldVid.remove();
-        if (oldImg) oldImg.remove();
-
+        var targetOpacity = '0.35';
         var commonStyle = [
             'position: fixed !important',
             'top: 0 !important',
@@ -319,54 +340,96 @@ def patch_workbench(video_path: str = None) -> bool:
             'width: 100vw !important',
             'height: 100vh !important',
             'object-fit: cover !important',
-            'opacity: 0.35 !important',
-            'z-index: 999 !important',
+            'z-index: 0 !important',
             'pointer-events: none !important',
-            'display: block !important'
+            'display: block !important',
+            'transition: opacity 0.3s ease-in-out !important'
         ].join(';');
 
         if (isVideoSrc(src)) {{
-            var video = document.createElement('video');
-            video.id = LW_VIDEO_ID;
-            video.muted = true;
-            video.defaultMuted = true;
-            video.autoplay = true;
-            video.loop = true;
-            video.playsInline = true;
-            video.preload = 'auto';
+            var newVideo = document.createElement('video');
+            newVideo.muted = true;
+            newVideo.defaultMuted = true;
+            newVideo.autoplay = true;
+            newVideo.loop = true;
+            newVideo.playsInline = true;
+            newVideo.preload = 'auto';
 
-            video.setAttribute('muted', '');
-            video.setAttribute('autoplay', '');
-            video.setAttribute('loop', '');
-            video.setAttribute('playsinline', '');
-            video.setAttribute('webkit-playsinline', '');
+            newVideo.setAttribute('muted', '');
+            newVideo.setAttribute('autoplay', '');
+            newVideo.setAttribute('loop', '');
+            newVideo.setAttribute('playsinline', '');
+            newVideo.setAttribute('webkit-playsinline', '');
 
-            video.style.cssText = commonStyle;
+            // Double-buffering : on démarre à opacity 0 si un ancien média est déjà actif pour éliminer le blackscreen
+            var hasPrevious = !!(oldVid || oldImg);
+            newVideo.style.cssText = commonStyle + '; opacity: ' + (hasPrevious ? '0' : targetOpacity) + ' !important;';
 
-            video.oncanplay = function() {{
-                if (video.paused) video.play().catch(function() {{}});
+            var cleanedUp = false;
+            function onMediaReady() {{
+                if (cleanedUp) return;
+                cleanedUp = true;
+                newVideo.id = LW_VIDEO_ID;
+                newVideo.style.opacity = targetOpacity;
+                if (oldVid && oldVid !== newVideo) {{
+                    oldVid.style.opacity = '0';
+                    setTimeout(function() {{ try {{ oldVid.remove(); }} catch(e) {{}} }}, 350);
+                }}
+                if (oldImg) {{
+                    oldImg.style.opacity = '0';
+                    setTimeout(function() {{ try {{ oldImg.remove(); }} catch(e) {{}} }}, 350);
+                }}
+            }}
+
+            newVideo.oncanplay = function() {{
+                if (newVideo.paused) newVideo.play().catch(function() {{}});
+                onMediaReady();
             }};
-            video.onloadeddata = function() {{
-                if (video.paused) video.play().catch(function() {{}});
+            newVideo.onloadeddata = function() {{
+                if (newVideo.paused) newVideo.play().catch(function() {{}});
+                onMediaReady();
             }};
-            video.onended = function() {{
-                video.currentTime = 0;
-                video.play().catch(function() {{}});
+            newVideo.onplaying = function() {{
+                onMediaReady();
             }};
-            video.onerror = function(e) {{
-                console.warn("[WallpaperMaison] Erreur lecture vidéo:", e);
+            newVideo.onended = function() {{
+                newVideo.currentTime = 0;
+                newVideo.play().catch(function() {{}});
+            }};
+            newVideo.onerror = function(e) {{
+                console.warn("[WallpaperMaison] Erreur chargement vidéo:", e);
+                try {{ newVideo.remove(); }} catch(err) {{}}
             }};
 
-            video.src = src;
-            document.body.appendChild(video);
+            newVideo.src = src;
+            document.body.appendChild(newVideo);
+            newVideo.play().catch(function() {{}});
 
-            video.play().catch(function() {{}});
+            // Sécurité anti-blocage (max 1.5s)
+            setTimeout(function() {{
+                if (!cleanedUp && document.body.contains(newVideo)) {{
+                    onMediaReady();
+                }}
+            }}, 1500);
+
         }} else {{
-            var img = document.createElement('img');
-            img.id = LW_IMG_ID;
-            img.src = src;
-            img.style.cssText = commonStyle;
-            document.body.appendChild(img);
+            var newImg = document.createElement('img');
+            var hasPrevious = !!(oldVid || oldImg);
+            newImg.style.cssText = commonStyle + '; opacity: ' + (hasPrevious ? '0' : targetOpacity) + ' !important;';
+            newImg.onload = function() {{
+                newImg.id = LW_IMG_ID;
+                newImg.style.opacity = targetOpacity;
+                if (oldVid) {{
+                    oldVid.style.opacity = '0';
+                    setTimeout(function() {{ try {{ oldVid.remove(); }} catch(e) {{}} }}, 350);
+                }}
+                if (oldImg && oldImg !== newImg) {{
+                    oldImg.style.opacity = '0';
+                    setTimeout(function() {{ try {{ oldImg.remove(); }} catch(e) {{}} }}, 350);
+                }}
+            }};
+            newImg.src = src;
+            document.body.appendChild(newImg);
         }}
     }}
 
@@ -481,7 +544,7 @@ def patch_workbench(video_path: str = None) -> bool:
                     return res.json();
                 }})
                 .then(function(data) {{
-                    if (data && data.path && data.path !== currentRawPath) {{
+                    if (data && data.path && getBasename(data.path) !== getBasename(currentRawPath)) {{
                         console.log("[WallpaperMaison] Fond d'écran mis à jour en direct (fetch):", data.path);
                         applyMedia(data.path);
                     }}

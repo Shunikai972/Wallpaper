@@ -411,7 +411,9 @@ async function activate(context) {
                 }
                 if (currentDetected && fs.existsSync(currentDetected)) {
                     const curCfg = wallpaper.getRawConfig();
-                    if (curCfg.videoPath !== currentDetected) {
+                    const curBase = path.basename(curCfg.videoPath || '');
+                    const newBase = path.basename(currentDetected);
+                    if (curBase !== newBase) {
                         wallpaper.updateConfig({ videoPath: currentDetected, enabled: true }).catch(() => {});
                         const patchScript = path.join(homeDir, 'reseau/Perso/Bureau/Wallpaper/scripts/patch_vscode_html.py');
                         if (fs.existsSync(patchScript)) {

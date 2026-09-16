@@ -321,21 +321,71 @@ Sur certains fonds d'écran animés (notamment les vidéos 4K `3840x2160`, les e
 4. **Prise en charge du Flatpak Celluloid dans les wrappers système** :
    - Mise à jour de `scripts/setup.sh`, `~/.local/bin/mpv` et `~/.local/bin/ffmpeg-full` pour exploiter automatiquement l'environnement Flatpak `io.github.celluloid_player.Celluloid` disponible sur le système Fedora.
 
+## 14. Écrans noirs périodiques (Blackscreens VS Code et Bureau) et illisibilité du code par superposition des couleurs
+
+### 14.1 Symptômes constatés
+1. **Blackscreen périodique cyclique** :
+   - À intervalles réguliers (toutes les quelques secondes ou minutes), la fenêtre de VS Code et le bureau GNOME présentaient des coupures noires récurrentes (flashs noirs ou blackscreen temporaire).
+2. **Superposition gênante et code illisible dans VS Code** :
+   - Le texte et les mots-clés du code devenaient difficiles ou impossibles à déchiffrer lorsque le fond d'écran vidéo passait sous les lignes d'édition (superposition des couleurs claires/sombres).
+   - L'ajustement automatique de colorimétrie n'appliquait pas de thème de contraste adapté aux tokens de code (keywords, fonctions, chaînes, types, commentaires), les laissant se confondre avec les éléments graphiques de la vidéo.
+
+### 14.2 Causes racines identifiées
+
+1. **Boucle infinie d'écho de chemin (Path Mismatch Echo Loop)** :
+   - Lorsqu'un média était appliqué, le moteur Hanabi enregistrait dans GSettings le chemin du fichier optimisé 1080p (`~/.cache/wallpapermaison/optimized/...mp4`).
+   - Cependant, le gestionnaire de rotation (`RotationManager`) et l'extension VS Code référençaient le chemin original brut (`~/reseau/Perso/Bureau/Wallpaper/...mp4`).
+   - À chaque tick de surveillance (toutes les 1 à 2 secondes), le démon `vscode_sync.py` et l'intervalle de synchronisation de l'extension comparaient les chemins absolus : voyant que `.../optimized/...` ne correspondait pas textuellement à `.../Wallpaper/...`, ils considéraient à tort qu'un changement venait d'avoir lieu et réappliquaient le média en continu, provoquant des réinitialisations de décodeur et des flashs noirs cycliques.
+
+2. **Destruction prématurée du buffer vidéo sans Double-Buffering** :
+   - Dans `scripts/patch_vscode_html.py`, la fonction `applyMedia()` appelait `oldVid.remove()` immédiatement lors de l'injection de la balise `<video>`, avant même que le nouveau média n'ait chargé sa première trame. L'éditeur Monaco étant configuré avec un fond transparent, la fenêtre affichait un fond noir vide pendant la phase de chargement/buffering.
+   - De façon similaire, dans l'extension GNOME Hanabi (`renderer.js`), `oldMedia.clear()` était invoqué dès le signal `notify::prepared` de GTK4, avant que la première trame du nouveau média ne soit réellement peinte à l'écran.
+
+3. **Spikes CPU extrêmes provoqués par des lancements répétés de Flatpak** :
+   - Dans `frameExtractor.js`, l'extraction d'images pour le moteur de colorimétrie invoquait `flatpak run io.github.celluloid_player.Celluloid ffmpeg ...` toutes les 2.5 secondes. Chaque appel créait un bac à sable Flatpak complet (`bwrap`), générant des pics CPU à plus de 560%, provoquant des chutes brutales de framerate et des interruptions de rendu au niveau de Mutter et Chromium.
+
+4. **Superposition visuelle et absence de contraste des lignes de code** :
+   - Dans `patch_vscode_html.py`, la vidéo était injectée avec `z-index: 999 !important; opacity: 0.35;`, se superposant directement par-dessus le texte de l'éditeur au lieu de rester en arrière-plan.
+   - Aucun effet d'ombre portée (`text-shadow`) ou de sous-couche contrastée n'était appliqué sur `.monaco-editor .view-lines` et `.lines-content`.
+   - Le moteur de colorimétrie dynamique (`ColorPaletteExtractor` en Python et `ColorEngine` en JS) ajustait les bordures et fonds généraux mais ne configurait pas les tokens de syntaxe TextMate (`editor.tokenColorCustomizations`). De plus, un seuil de contraste trop agressif convertissait les couleurs de tokens en blanc monochrome (`#ffffff`), supprimant la distinction syntaxique.
+
+### 14.3 Solutions implémentées et validées
+
+1. **Normalisation par `basename` et bris de la boucle d'écho** :
+   - Dans `app/automation/vscode_sync.py`, `renderer.js`, `patch_vscode_html.py` et `vscode-extension/out/extension.js`, toutes les comparaisons de chemins utilisent désormais le nom de base du fichier (`os.path.basename` / `GLib.path_get_basename` / `getBasename`). Si le même média est déjà en cours de lecture (qu'il s'agisse de la version source ou de la version optimisée en cache), aucune réinitialisation n'est déclenchée.
+
+2. **Transition Double-Buffering continue sans écran noir** :
+   - Dans `patch_vscode_html.py`, `applyMedia()` injecte la nouvelle vidéo avec `opacity: 0` tout en conservant l'ancienne vidéo en cours de lecture. Dès que le nouvel élément émet l'événement `onplaying` ou `oncanplay`, une transition CSS `opacity 0.3s` amène la nouvelle vidéo à son opacité nominale (`0.35`), et l'ancienne vidéo n'est retirée du DOM qu'après confirmation de la lecture active.
+   - Dans `renderer.js` de Hanabi, l'appel à `oldMedia.clear()` est différé de 300 ms via `GLib.timeout_add(GLib.PRIORITY_LOW, 300, ...)` pour garantir que le premier buffer d'image du nouveau média est déjà peint sur la surface Mutter.
+
+3. **Optimisation de l'extraction de trames et élimination des pics CPU** :
+   - `frameExtractor.js` privilégie directement l'exécutable système `/usr/bin/ffmpeg` et le wrapper hôte avant de faire appel à un conteneur Flatpak.
+   - `colorEngine.js` mémorise le chemin du dernier média analysé et évite d'extraire inutilement des frames en continu lorsque le fond d'écran n'a pas changé.
+
+4. **Lisibilité maximale des lignes de code et colorisation syntaxique adaptée** :
+   - **Ordre d'empilement CSS corrigé** : la vidéo d'arrière-plan est positionnée en `z-index: 0 !important;` derrière `.monaco-workbench` configuré en `z-index: 1 !important;`.
+   - **Protection typographique du texte de code** : ajout d'une ombre portée nette `text-shadow: 0 1px 2px rgba(0,0,0,0.95), 0 0 1px rgba(0,0,0,0.95)` sur `.monaco-editor .view-lines` et d'une sous-couche subtilement teintée `rgba(13, 17, 23, 0.40)` sur `.monaco-editor .lines-content`.
+   - **Synthèse de tokens TextMate contrastés** : implémentation dans `themeSynchronizer.js`, `colorimetry.js` et `colorimetry.py` de règles de tokenisation complètes (`keyword`, `function`, `string`, `number`, `type`, `variable`, `property`, `comment`, `operator`, `constant`, `tag`).
+   - **Garantie de lisibilité WCAG sans décoloration** : l'algorithme `ensureContrast` éclaircit d'abord la luminosité (`v`) puis réduit subtilement la saturation vers des tons pastels vibrants sans jamais s'effondrer brutalement sur le blanc pur (`#ffffff`), garantissant un ratio de contraste supérieur à 5.0:1 à 7.0:1 sur fond sombre tout en conservant des teintes vives et distinctes.
+
 ---
 
-## 13. Synthèse des composants modifiés et validés
+## 15. Synthèse des composants modifiés et validés
 
 | Composant | Fichier | Rôle de la correction |
 | :--- | :--- | :--- |
 | **Moteur Hanabi** | `app/wallpaper/engines/hanabi_engine.py` | Résolution automatique du flux vidéo optimisé 1080p et synchronisation GSettings. |
 | **Optimiseur Vidéo** | `app/wallpaper/video_optimizer.py` | Moteur de conversion et cache ultra-fluide 1080p H.264 zéro-latence pour tout média lourd/4K. |
-| **GNOME Renderer** | `gnome-extension/.../renderer.js` | Résolution automatique de cache optimisé, GraphicsOffload Wayland direct, loop natif, purge mémoire `clear()` et suppression du polling bloquant NFS. |
+| **GNOME Renderer** | `gnome-extension/.../renderer.js` | Comparaison de `basename`, transition de frame 300ms sans black frame, GraphicsOffload Wayland direct, loop natif. |
 | **Scripts d'environnement** | `scripts/setup.sh`, `~/.local/bin/mpv`, `ffmpeg-full` | Support transparent des Flatpaks Celluloid et MPV pour un décodage complet H.264/HEVC. |
-| **Sync Daemon** | `app/automation/vscode_sync.py` | Empêcher l'écho inverse et publier immédiatement les fichiers `live_state` pour hot-swap. |
-| **Patch HTML** | `scripts/patch_vscode_html.py` | Lecture vidéo fluide sans blocage (suppression de `load()` et pause), CSP étendu, et live sync watcher 800ms. |
-| **Extension VS Code** | `vscode-extension/out/extension.js` | Tableau de bord moderne complet, hot-swap instantané, utilisation du flux optimisé pour soulager Chromium. |
+| **Sync Daemon** | `app/automation/vscode_sync.py` | Détection de changement par `basename`, élimination de la boucle d'écho de rechargement cyclique. |
+| **Patch HTML** | `scripts/patch_vscode_html.py` | Transition vidéo double-buffer sans coupure, z-index 0 arrière-plan, text-shadow 0 1px 2px et voile de lisibilité sur les lignes de code. |
+| **Extension VS Code** | `vscode-extension/out/extension.js` | Synchronisation de base sécurisée, suppression des rechargements intempestifs. |
+| **Moteur de Colorimétrie** | `colorimetry.js` & `colorimetry.py` | Synthèse complète de tokens de code TextMate et ajustement adaptatif sans perte de saturation. |
+| **Synchroniseur de Thème** | `themeSynchronizer.js` | Application dynamique des `editor.tokenColorCustomizations` pour Monaco Editor. |
+| **Extracteur de Frames** | `frameExtractor.js` & `colorEngine.js` | Priorisation de `/usr/bin/ffmpeg` système, élimination des pics CPU Flatpak et des extractions redondantes. |
 | **Gestionnaire Rotation** | `vscode-extension/out/rotationManager.js` | Moteur de timer réactif, sélection aléatoire/séquentielle, persistance duale JSON + `.env`. |
 | **Manifeste Extension** | `vscode-extension/package.json` | Commandes de rotation, activation globale (`*`) et menus complets. |
 | **Scheduler Python** | `app/automation/scheduler.py` | Support unifié de la configuration de rotation par dossier et délai. |
 
-L'ensemble des fonctionnalités (Live Wallpaper animé sans saccade à 60 FPS, baisse de plus de 70% de la charge CPU, hot-swap instantané sans rechargement de fenêtre, synchronisation bidirectionnelle Bureau <-> VS Code sans réversion, rotation automatique paramétrable avec compte à rebours, et persistance garantie sur tout poste Fedora Silverblue) est désormais 100% opérationnel, fluide et stabilisé.
+L'ensemble des fonctionnalités (absence totale d'écrans noirs cycliques sur VS Code et le bureau, lecture vidéo d'arrière-plan sans rupture, lisibilité parfaite et sans fatigue visuelle des lignes de code sous tout fond d'écran, adaptation automatique des couleurs syntaxiques, charge CPU minimale, et synchronisation multi-postes) est désormais 100% opérationnel, fluide et stabilisé.

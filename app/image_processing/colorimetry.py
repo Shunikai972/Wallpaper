@@ -123,26 +123,26 @@ def ensure_contrast(text_rgb: Tuple[int, int, int], bg_rgb: Tuple[int, int, int]
     bg_lum = relative_luminance(*bg_rgb)
 
     if bg_lum < 0.5:
-        step = 0.02
         new_v = v
-        new_s = s
-        while new_v <= 1.0:
-            candidate = hsv_to_rgb(h, new_s, new_v)
-            if contrast_ratio(candidate, bg_rgb) >= min_contrast:
-                return candidate
-            new_v += step
-            if new_v > 0.85:
-                new_s = max(0.0, new_s - 0.03)
-
-        return (255, 255, 255)
-    else:
-        step = 0.02
-        new_v = v
-        while new_v >= 0.0:
+        while new_v < 1.0:
             candidate = hsv_to_rgb(h, s, new_v)
             if contrast_ratio(candidate, bg_rgb) >= min_contrast:
                 return candidate
-            new_v -= step
+            new_v = min(1.0, new_v + 0.02)
+        new_s = s
+        while new_s > 0.0:
+            candidate = hsv_to_rgb(h, new_s, 1.0)
+            if contrast_ratio(candidate, bg_rgb) >= min_contrast:
+                return candidate
+            new_s = max(0.0, new_s - 0.02)
+        return (255, 255, 255)
+    else:
+        new_v = v
+        while new_v > 0.0:
+            candidate = hsv_to_rgb(h, s, new_v)
+            if contrast_ratio(candidate, bg_rgb) >= min_contrast:
+                return candidate
+            new_v = max(0.0, new_v - 0.02)
         return (0, 0, 0)
 
 def lerp_color(rgb_a: Tuple[int, int, int], rgb_b: Tuple[int, int, int], t: float) -> Tuple[int, int, int]:
@@ -242,6 +242,22 @@ class ColorPaletteExtractor:
 
         cursor_rgb = ensure_contrast(accent_rgb, bg_dark_rgb, min_contrast=5.0)
 
+        # ── Synthèse des couleurs pour les lignes de code (Syntax Highlighting Tokens) ──
+        kw_rgb = hsv_to_rgb(acc_h, min(0.85, max(0.55, acc_s)), 0.95)
+        kw_rgb = ensure_contrast(kw_rgb, bg_dark_rgb, min_contrast=5.5)
+
+        fn_hue = (acc_h + 150) % 360
+        fn_rgb = hsv_to_rgb(fn_hue, 0.65, 0.96)
+        fn_rgb = ensure_contrast(fn_rgb, bg_dark_rgb, min_contrast=6.0)
+
+        str_rgb = ensure_contrast(hsv_to_rgb(135, 0.60, 0.92), bg_dark_rgb, min_contrast=5.5)
+        num_rgb = ensure_contrast(hsv_to_rgb(35, 0.75, 0.98), bg_dark_rgb, min_contrast=6.0)
+        type_rgb = ensure_contrast(hsv_to_rgb(275, 0.55, 0.95), bg_dark_rgb, min_contrast=5.5)
+        var_rgb = ensure_contrast((230, 237, 243), bg_dark_rgb, min_contrast=7.0)
+        prop_rgb = ensure_contrast((121, 192, 255), bg_dark_rgb, min_contrast=5.5)
+        cmt_rgb = ensure_contrast((139, 148, 158), bg_dark_rgb, min_contrast=4.5)
+        op_rgb = ensure_contrast((240, 246, 252), bg_dark_rgb, min_contrast=7.0)
+
         return {
             "dominant": rgb_to_hex(*dom_rgb),
             "secondary": rgb_to_hex(*sec_rgb),
@@ -256,6 +272,19 @@ class ColorPaletteExtractor:
             "status_bar_background": rgb_to_hex(*dom_rgb),
             "status_bar_foreground": rgb_to_hex(*ensure_contrast((255, 255, 255), dom_rgb, min_contrast=4.5)),
             "contrast_ratio": contrast_ratio(fg_text, bg_dark_rgb),
+            "tokens": {
+                "keyword": rgb_to_hex(*kw_rgb),
+                "function": rgb_to_hex(*fn_rgb),
+                "string": rgb_to_hex(*str_rgb),
+                "number": rgb_to_hex(*num_rgb),
+                "type": rgb_to_hex(*type_rgb),
+                "variable": rgb_to_hex(*var_rgb),
+                "property": rgb_to_hex(*prop_rgb),
+                "comment": rgb_to_hex(*cmt_rgb),
+                "operator": rgb_to_hex(*op_rgb),
+                "constant": rgb_to_hex(*num_rgb),
+                "tag": rgb_to_hex(*kw_rgb)
+            },
             "raw": {
                 "dominant": dom_rgb,
                 "secondary": sec_rgb,
@@ -286,6 +315,19 @@ class ColorPaletteExtractor:
             "status_bar_background": "#161b22",
             "status_bar_foreground": "#f0f6fc",
             "contrast_ratio": contrast_ratio(fg, bg),
+            "tokens": {
+                "keyword": "#ff7b72",
+                "function": "#79c0ff",
+                "string": "#7ee787",
+                "number": "#ffa657",
+                "type": "#d2a8ff",
+                "variable": "#e6edf3",
+                "property": "#a5d6ff",
+                "comment": "#8b949e",
+                "operator": "#f0f6fc",
+                "constant": "#ffa657",
+                "tag": "#7ee787"
+            },
             "raw": {
                 "dominant": fallback_rgb,
                 "secondary": (88, 166, 255),
@@ -316,9 +358,13 @@ def build_vscode_color_customizations(palette: Dict[str, Any], mode: str = "full
         "editor.foreground": palette["editor_foreground"],
         "editorCursor.foreground": palette["cursor"],
         "editor.selectionBackground": palette["selection"],
-        "editor.lineHighlightBackground": palette["active_tab_background"] + "44",
-        "editorLineNumber.foreground": palette["muted_foreground"] + "99",
+        "editor.lineHighlightBackground": "#ffffff0d",
+        "editorLineNumber.foreground": palette["muted_foreground"],
         "editorLineNumber.activeForeground": palette["editor_foreground"],
+        "editorIndentGuide.background": "#ffffff1a",
+        "editorIndentGuide.activeBackground": palette["accent"] + "88",
+        "editorBracketMatch.background": palette["accent"] + "33",
+        "editorBracketMatch.border": palette["accent"],
 
         "activityBar.background": palette["sidebar_background"],
         "activityBar.foreground": palette["editor_foreground"],
@@ -350,6 +396,153 @@ def build_vscode_color_customizations(palette: Dict[str, Any], mode: str = "full
         "focusBorder": palette["accent"],
         "badge.background": palette["accent"],
         "badge.foreground": palette["editor_background"]
+    }
+
+def build_vscode_token_customizations(palette: Dict[str, Any], mode: str = "full") -> Optional[Dict[str, Any]]:
+    if mode == "accent-only":
+        return None
+
+    tokens = palette.get("tokens") or {
+        "keyword": palette["accent"],
+        "function": palette["cursor"],
+        "string": palette["secondary"],
+        "number": palette["secondary"],
+        "type": palette["accent"],
+        "variable": palette["editor_foreground"],
+        "property": palette["secondary"],
+        "comment": palette["muted_foreground"],
+        "operator": palette["editor_foreground"],
+        "constant": palette["secondary"],
+        "tag": palette["accent"]
+    }
+
+    return {
+        "textMateRules": [
+            {
+                "name": "Comments",
+                "scope": [
+                    "comment",
+                    "comment.line",
+                    "comment.block",
+                    "punctuation.definition.comment",
+                    "comment.block.documentation"
+                ],
+                "settings": {"foreground": tokens["comment"], "fontStyle": "italic"}
+            },
+            {
+                "name": "Keywords and Storage",
+                "scope": [
+                    "keyword",
+                    "keyword.control",
+                    "keyword.control.conditional",
+                    "keyword.control.loop",
+                    "keyword.control.flow",
+                    "storage",
+                    "storage.type",
+                    "storage.modifier",
+                    "keyword.operator.new",
+                    "keyword.operator.expression"
+                ],
+                "settings": {"foreground": tokens["keyword"], "fontStyle": "bold"}
+            },
+            {
+                "name": "Functions and Methods",
+                "scope": [
+                    "entity.name.function",
+                    "support.function",
+                    "entity.name.method",
+                    "meta.function-call",
+                    "variable.function"
+                ],
+                "settings": {"foreground": tokens["function"], "fontStyle": "bold"}
+            },
+            {
+                "name": "Strings and Templates",
+                "scope": [
+                    "string",
+                    "string.quoted",
+                    "string.quoted.single",
+                    "string.quoted.double",
+                    "string.template",
+                    "string.interpolated",
+                    "punctuation.definition.string"
+                ],
+                "settings": {"foreground": tokens["string"]}
+            },
+            {
+                "name": "Numbers and Numeric Constants",
+                "scope": [
+                    "constant.numeric",
+                    "constant.numeric.integer",
+                    "constant.numeric.float",
+                    "constant.numeric.hex"
+                ],
+                "settings": {"foreground": tokens["number"], "fontStyle": "bold"}
+            },
+            {
+                "name": "Constants and Language Builtins",
+                "scope": [
+                    "constant.language",
+                    "constant.other",
+                    "support.constant",
+                    "constant.language.boolean"
+                ],
+                "settings": {"foreground": tokens["constant"], "fontStyle": "bold"}
+            },
+            {
+                "name": "Types, Classes and Interfaces",
+                "scope": [
+                    "entity.name.type",
+                    "entity.name.class",
+                    "entity.name.struct",
+                    "entity.name.interface",
+                    "support.type",
+                    "support.class",
+                    "entity.other.inherited-class"
+                ],
+                "settings": {"foreground": tokens["type"], "fontStyle": "bold"}
+            },
+            {
+                "name": "Variables and Parameters",
+                "scope": [
+                    "variable",
+                    "variable.other",
+                    "variable.parameter",
+                    "variable.language.this",
+                    "variable.language.special"
+                ],
+                "settings": {"foreground": tokens["variable"]}
+            },
+            {
+                "name": "Properties and Object Keys",
+                "scope": [
+                    "variable.other.property",
+                    "variable.other.object.property",
+                    "support.type.property-name",
+                    "meta.object-literal.key"
+                ],
+                "settings": {"foreground": tokens["property"]}
+            },
+            {
+                "name": "HTML/XML Tags and Attributes",
+                "scope": [
+                    "entity.name.tag",
+                    "entity.other.attribute-name"
+                ],
+                "settings": {"foreground": tokens["tag"]}
+            },
+            {
+                "name": "Operators and Punctuation",
+                "scope": [
+                    "keyword.operator",
+                    "keyword.operator.assignment",
+                    "keyword.operator.comparison",
+                    "punctuation.separator",
+                    "punctuation.terminator"
+                ],
+                "settings": {"foreground": tokens["operator"]}
+            }
+        ]
     }
 
 color_extractor = ColorPaletteExtractor()

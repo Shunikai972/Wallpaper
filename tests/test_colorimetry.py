@@ -3,7 +3,8 @@ from PIL import Image
 from app.image_processing.colorimetry import (
     rgb_to_hsv, hsv_to_rgb, rgb_to_lab, delta_e,
     relative_luminance, contrast_ratio, ensure_contrast,
-    lerp_color, ColorPaletteExtractor, build_vscode_color_customizations
+    lerp_color, ColorPaletteExtractor, build_vscode_color_customizations,
+    build_vscode_token_customizations
 )
 
 class TestColorimetry(unittest.TestCase):
@@ -49,6 +50,19 @@ class TestColorimetry(unittest.TestCase):
         self.assertIn("editor.foreground", colors)
         self.assertIn("editorCursor.foreground", colors)
         self.assertIn("statusBar.background", colors)
+
+        tokens = build_vscode_token_customizations(palette, mode="full")
+        self.assertIsNotNone(tokens)
+        self.assertIn("textMateRules", tokens)
+        rule_scopes = [rule["scope"] for rule in tokens["textMateRules"]]
+        flat_scopes = [s for sub in rule_scopes for s in sub]
+        self.assertIn("keyword", flat_scopes)
+        self.assertIn("entity.name.function", flat_scopes)
+        self.assertIn("string", flat_scopes)
+        self.assertIn("constant.numeric", flat_scopes)
+        self.assertIn("entity.name.type", flat_scopes)
+        self.assertIn("variable", flat_scopes)
+        self.assertIn("comment", flat_scopes)
 
 if __name__ == "__main__":
     unittest.main()
