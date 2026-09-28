@@ -51,7 +51,10 @@ class TestSyncAndEnv(unittest.TestCase):
     def test_vscode_sync_publish_state(self, mock_run):
         sync = VsCodeSync()
         state_file = self.root / "current_wallpaper.json"
-        with patch("app.automation.vscode_sync.STATE_FILE", state_file):
+        with patch("app.automation.vscode_sync.STATE_FILE", state_file), patch(
+            "app.automation.vscode_sync.stage_media_for_vscode",
+            side_effect=lambda path: path,
+        ):
             dummy_video = self.root / "test.mp4"
             dummy_video.write_text("dummy", encoding="utf-8")
             sync.publish_state(str(dummy_video), media_type="video", source="desktop")

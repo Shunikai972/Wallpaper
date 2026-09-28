@@ -1,5 +1,6 @@
 """Moteur de fond d'écran KDE Plasma via DBus / plasmashell."""
 
+import json
 import logging
 import os
 import shutil
@@ -40,7 +41,7 @@ class KdeWallpaperEngine(BaseWallpaperEngine):
         if not qdbus_bin:
             return False
 
-        file_uri = f"file://{p}"
+        file_uri = p.as_uri()
         # Script JS pour plasmashell
         js_script = f"""
         var allDesktops = desktops();
@@ -48,7 +49,7 @@ class KdeWallpaperEngine(BaseWallpaperEngine):
             var d = allDesktops[i];
             d.wallpaperPlugin = "org.kde.image";
             d.currentConfigGroup = Array("Wallpaper", "org.kde.image", "General");
-            d.writeConfig("Image", "{file_uri}");
+            d.writeConfig("Image", {json.dumps(file_uri)});
         }}
         """
 

@@ -21,24 +21,20 @@ class MediaScanner:
         self._scanning = False
         self._abort = False
         self._current_thread: Optional[threading.Thread] = None
+        self._state_lock = threading.Lock()
 
     def is_scanning(self) -> bool:
-        return self._scanning
+        with self._state_lock:
+            return self._scanning
 
     def abort(self) -> None:
-        self._abort = True
+        with self._state_lock:
+            self._abort = True
 
     def scan_directories_async(self, directories: List[str], recursive: bool = True,
                                on_progress: Optional[Callable[[int, int, str], None]] = None,
                                on_complete: Optional[Callable[[int], None]] = None) -> None:
         """Démarre le scan dans un thread en tâche de fond pour ne jamais bloquer l'UI."""
-        if self._scanning:
-            logger.warning("Un scan est déjà en cours d'exécution.")
-            return
-
-        self._abort = False
-        self._scanning = True
-
         def run() -> None:
             total_added = 0
             try:
@@ -91,17 +87,28 @@ class MediaScanner:
                 bus.emit("scan_complete", total_added=total_added)
 
             finally:
-                self._scanning = False
-                self._abort = False
+                with self._state_lock:
+                    self._scanning = False
+                    self._abort = False
 
-        self._current_thread = threading.Thread(target=run, daemon=True, name="MediaScannerThread")
-        self._current_thread.start()
+        with self._state_lock:
+            if self._scanning:
+                logger.warning("Un scan est déjà en cours d'exécution.")
+                return
+            self._abort = False
+            self._scanning = True
+            self._current_thread = threading.Thread(
+                target=run, daemon=True, name="MediaScannerThread"
+            )
+            self._current_thread.start()
 
     def scan_directories_sync(self, directories: List[str], recursive: bool = True) -> int:
         """Exécute le scan de manière synchrone en attendant la complétion (pour les commandes CLI)."""
         self.scan_directories_async(directories, recursive=recursive)
-        if self._current_thread:
-            self._current_thread.join()
+        with self._state_lock:
+            current_thread = self._current_thread
+        if current_thread:
+            current_thread.join()
         return db.get_stats().get("total", 0)
 
     def import_single_file(self, file_path_str: str) -> Optional[Dict[str, Any]]:

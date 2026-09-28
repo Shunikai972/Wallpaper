@@ -9,6 +9,31 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VENV_PYTHON="${SCRIPT_DIR}/.venv/bin/python"
 
+# Importer les valeurs de la session graphique si systemd a lancé le service
+# avant le fichier XDG Autostart. Le verrou est propre à l'écran/session : une
+# seconde connexion au même compte peut ainsi démarrer son propre renderer.
+if command -v systemctl >/dev/null 2>&1; then
+    for env_key in WAYLAND_DISPLAY DISPLAY XDG_SESSION_ID XDG_SESSION_TYPE XDG_CURRENT_DESKTOP DBUS_SESSION_BUS_ADDRESS; do
+        if [ -z "${!env_key:-}" ]; then
+            env_value="$(systemctl --user show-environment 2>/dev/null | sed -n "s/^${env_key}=//p" | head -n 1 || true)"
+            if [ -n "$env_value" ]; then
+                export "${env_key}=${env_value}"
+            fi
+        fi
+    done
+fi
+
+SESSION_SCOPE="${WALLPAPERMAISON_SESSION_SCOPE:-${XDG_SESSION_ID:-${WAYLAND_DISPLAY:-${DISPLAY:-user}}}}"
+SESSION_SCOPE="$(printf '%s' "$SESSION_SCOPE" | tr -c 'A-Za-z0-9_.-' '_')"
+XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+if command -v flock >/dev/null 2>&1 && [ -d "$XDG_RUNTIME_DIR" ]; then
+    exec 9>"${XDG_RUNTIME_DIR}/wallpapermaison_bootstrap_${SESSION_SCOPE}.lock"
+    if ! flock -n 9; then
+        exit 0
+    fi
+fi
+export WALLPAPERMAISON_SESSION_SCOPE="$SESSION_SCOPE"
+
 # Détection et auto-guérison du stockage persistant réseau (IUT NFS reseau/Perso)
 if [ -d "${HOME}/reseau/Perso" ]; then
     mkdir -p "${HOME}/.config" "${HOME}/.local/share" "${HOME}/.cache"
@@ -64,6 +89,10 @@ fi
 
 # Auto-guérison et déploiement de root-shell, lanceur VS Code et autostart
 mkdir -p "${HOME}/.local/bin" "${HOME}/.local/share/applications" "${HOME}/.config/autostart" 2>/dev/null || true
+if [ -f "${SCRIPT_DIR}/scripts/session-start.sh" ]; then
+    cp -f "${SCRIPT_DIR}/scripts/session-start.sh" "${HOME}/.local/bin/wallpapermaison-session-start" 2>/dev/null || true
+    chmod +x "${HOME}/.local/bin/wallpapermaison-session-start" 2>/dev/null || true
+fi
 if [ ! -f "${HOME}/.config/autostart/wallpapermaison.desktop" ] && [ -f "${SCRIPT_DIR}/scripts/autostart.desktop" ]; then
     cp -f "${SCRIPT_DIR}/scripts/autostart.desktop" "${HOME}/.config/autostart/wallpapermaison.desktop" 2>/dev/null || true
 fi

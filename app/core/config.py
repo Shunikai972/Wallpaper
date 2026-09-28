@@ -1,5 +1,6 @@
 """Gestionnaire de configuration et de profils de performance."""
 
+import copy
 import json
 import logging
 import os
@@ -134,7 +135,9 @@ class ConfigManager:
         self.cache_dir = CACHE_DIR
         self.data_dir = DATA_DIR
         self.config_file = CONFIG_FILE
-        self._config: Dict[str, Any] = DEFAULT_CONFIG.copy()
+        # The defaults contain nested dictionaries and lists. A shallow copy lets
+        # one manager (or caller) mutate the defaults used by every other instance.
+        self._config: Dict[str, Any] = copy.deepcopy(DEFAULT_CONFIG)
         self.ensure_directories()
         self.load()
 
@@ -157,7 +160,7 @@ class ConfigManager:
                 logger.info("Configuration chargée avec succès depuis %s", self.config_file)
         except Exception as e:
             logger.error("Erreur lors de la lecture de la configuration (%s), chargement des défauts: %s", self.config_file, e)
-            self._config = DEFAULT_CONFIG.copy()
+            self._config = copy.deepcopy(DEFAULT_CONFIG)
 
     def _merge_dicts(self, base: Dict[str, Any], override: Dict[str, Any]) -> None:
         for k, v in override.items():
@@ -200,7 +203,7 @@ class ConfigManager:
 
     def get_all(self) -> Dict[str, Any]:
         """Retourne l'intégralité de la configuration."""
-        return self._config.copy()
+        return copy.deepcopy(self._config)
 
     def get_active_profile_settings(self) -> Dict[str, Any]:
         """Retourne les paramètres du profil de performance actif."""

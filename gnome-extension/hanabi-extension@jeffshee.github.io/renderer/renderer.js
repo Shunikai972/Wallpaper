@@ -410,7 +410,12 @@ var HanabiRenderer = GObject.registerClass(
       this.adapter = GstPlay.PlaySignalAdapter.new(this.play);
       this.adapter.connect(
         "end-of-stream",
-        (adapter) => adapter.play.seek(0)
+        (adapter) => {
+          // Seeking alone leaves GstPlay paused after EOS on current GTK/GStreamer
+          // builds. Explicitly resume the pipeline so the wallpaper keeps moving.
+          adapter.play.seek(0);
+          adapter.play.play();
+        }
       );
       this.adapter.connect(
         "warning",
@@ -486,8 +491,15 @@ var HanabiRenderer = GObject.registerClass(
         this.currentFile = null;
         this.media = new Gtk.MediaFile();
       }
-      this.media.set({ loop: true, playing: true });
+      // GtkMediaFile can report playing=true forever after its timestamp reaches
+      // duration when native looping is enabled. Keep loop disabled so the
+      // ended signal fires and the handler above restarts playback explicitly.
+      this.media.set({ loop: false });
       this.connectMediaSignals(this.media);
+      this.media.play();
+      // GtkMediaStream can already be playing before the first notify signal is emitted.
+      // Keep the D-Bus state in sync on initial launch as well as on later changes.
+      this.playing = this.media.get_playing();
       this.sharedPaintable = this.media;
       const widget = this.getWidgetFromSharedPaintable();
       this.markRandomStartPending();
@@ -503,6 +515,12 @@ var HanabiRenderer = GObject.registerClass(
                     <method name="setPause"/>
                     <method name="setFilePath">
                         <arg name="path" type="s" direction="in"/>
+                    </method>
+                    <method name="getPlaybackPosition">
+                        <arg name="position" type="d" direction="out"/>
+                    </method>
+                    <method name="getFilePath">
+                        <arg name="path" type="s" direction="out"/>
                     </method>
                     <property name="isPlaying" type="b" access="read"/>
                     <signal name="isPlayingChanged">
@@ -598,8 +616,9 @@ var HanabiRenderer = GObject.registerClass(
         this.setPlay();
       } else if (this.media) {
         const newMedia = Gtk.MediaFile.new_for_file(this.currentFile);
-        newMedia.set({ loop: true, playing: true });
+        newMedia.set({ loop: false });
         this.connectMediaSignals(newMedia);
+        newMedia.play();
         newMedia.connect("notify::prepared", () => {
           this.pictures.forEach((p) => p.set_paintable(newMedia));
           const oldMedia = this.media;
@@ -696,6 +715,16 @@ var HanabiRenderer = GObject.registerClass(
     }
     get isPlaying() {
       return this.playing;
+    }
+    getPlaybackPosition() {
+      if (this.media)
+        return Number(this.media.get_timestamp()) / 1e6;
+      if (this.play && typeof this.play.get_position === "function")
+        return Number(this.play.get_position()) / 1e6;
+      return -1;
+    }
+    getFilePath() {
+      return this.currentFile?.get_path() ?? videoPath ?? "";
     }
     markRandomStartPending() {
       this.randomStartPending = true;

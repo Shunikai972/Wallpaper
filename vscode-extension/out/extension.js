@@ -7,6 +7,7 @@ exports.activate = activate;
 exports.deactivate = deactivate;
 const fs = require('fs');
 const path = require('path');
+const { pathToFileURL } = require('url');
 const vscode_1 = __importDefault(require("vscode"));
 const liveWallpaper_1 = require("./liveWallpaper");
 const constants_1 = require("./utils/constants");
@@ -143,6 +144,31 @@ async function activate(context) {
     const home = process.env.HOME || '/var/home/' + (process.env.USER || 'E256190S');
     const stateFile = path.join(home, '.config/wallpapermaison/current_wallpaper.json');
 
+    const stageMediaForWorkbench = (filePath) => new Promise((resolve) => {
+        const projectDir = process.env.WALLPAPERMAISON_DIR || path.join(home, 'reseau/Perso/Bureau/Wallpaper');
+        const stageScript = path.join(projectDir, 'app/automation/vscode_media.py');
+        const childProcess = require('child_process');
+        childProcess.execFile('python3', [stageScript, filePath, context.extensionPath, '--url'], { timeout: 180000 }, (error, stdout, stderr) => {
+            const stagedPath = (stdout || '').trim();
+            if (error || !stagedPath) {
+                console.warn('[WallpaperMaison] Impossible de préparer le média pour le workbench:', (stderr || '').trim() || error?.message);
+                resolve(filePath);
+                return;
+            }
+            resolve(stagedPath);
+        });
+    });
+
+    const atomicWriteFile = (filePath, content) => {
+        const tempPath = `${filePath}.${process.pid}.${Math.random().toString(16).slice(2)}.tmp`;
+        try {
+            fs.writeFileSync(tempPath, content, 'utf8');
+            fs.renameSync(tempPath, filePath);
+        } finally {
+            try { fs.rmSync(tempPath, { force: true }); } catch (e) {}
+        }
+    };
+
     const updateLiveStateFiles = (filePath, mediaType = 'video') => {
         const isVid = mediaType === 'video' || ['.mp4', '.webm', '.mkv', '.mov'].some(ext => filePath.toLowerCase().endsWith(ext));
         const resolvedType = isVid ? 'video' : 'image';
@@ -164,8 +190,8 @@ async function activate(context) {
         for (const d of dirs) {
             try {
                 if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
-                fs.writeFileSync(path.join(d, 'live_state.json'), jsonContent, 'utf8');
-                fs.writeFileSync(path.join(d, 'live_state.js'), jsContent, 'utf8');
+                atomicWriteFile(path.join(d, 'live_state.json'), jsonContent);
+                atomicWriteFile(path.join(d, 'live_state.js'), jsContent);
             } catch (e) {}
         }
     };
@@ -189,6 +215,7 @@ async function activate(context) {
                     }
                 }
             }
+            const workbenchPath = await stageMediaForWorkbench(isVid ? playablePath : filePath);
 
             // 1. Écriture dans le fichier d'état partagé current_wallpaper.json et live_state
             const dir = path.dirname(stateFile);
@@ -196,12 +223,13 @@ async function activate(context) {
             const state = {
                 path: filePath,
                 playable_path: playablePath,
+                vscode_path: workbenchPath,
                 media_type: resolvedType,
                 source: 'vscode',
                 timestamp: Date.now() / 1000
             };
-            fs.writeFileSync(stateFile, JSON.stringify(state, null, 2), 'utf8');
-            updateLiveStateFiles(playablePath, resolvedType);
+            atomicWriteFile(stateFile, JSON.stringify(state, null, 2));
+            updateLiveStateFiles(workbenchPath, resolvedType);
 
             // 2. Application immédiate sur GNOME Shell Mutter (Extension Hanabi ou GSettings Background)
             try {
@@ -210,7 +238,7 @@ async function activate(context) {
                     cp.spawn('gsettings', ['set', 'io.github.jeffshee.hanabi-extension', 'video-path', playablePath]);
                     cp.spawn('gdbus', ['call', '--session', '--dest', 'io.github.jeffshee.HanabiRenderer', '--object-path', '/io/github/jeffshee/HanabiRenderer', '--method', 'io.github.jeffshee.HanabiRenderer.setFilePath', playablePath]);
                 } else {
-                    const fileUri = 'file://' + filePath;
+                    const fileUri = pathToFileURL(filePath).href;
                     cp.spawn('gsettings', ['set', 'org.gnome.desktop.background', 'picture-uri', fileUri]);
                     cp.spawn('gsettings', ['set', 'org.gnome.desktop.background', 'picture-uri-dark', fileUri]);
                 }
@@ -220,7 +248,8 @@ async function activate(context) {
             await wallpaper.updateConfig({ videoPath: playablePath, enabled: true });
 
             // 4. Mise à jour synchrone du patch workbench.html
-            const patchScript = path.join(home, 'reseau/Perso/Bureau/Wallpaper/scripts/patch_vscode_html.py');
+            const projectDir = process.env.WALLPAPERMAISON_DIR || path.join(home, 'reseau/Perso/Bureau/Wallpaper');
+            const patchScript = path.join(projectDir, 'scripts/patch_vscode_html.py');
             if (fs.existsSync(patchScript)) {
                 try {
                     require('child_process').spawnSync('python3', [patchScript, playablePath], { timeout: 3000 });
@@ -324,15 +353,15 @@ async function activate(context) {
                 canSelectMany: false,
                 title: 'Sélectionner un nouveau fond d\'écran',
                 filters: {
-                    'Vidéos et Images': ['mp4', 'webm', 'mkv', 'png', 'jpg', 'jpeg', 'webp', 'gif'],
-                    'Vidéos': ['mp4', 'webm', 'mkv'],
+                    'Vidéos et Images': ['mp4', 'webm', 'mkv', 'mov', 'png', 'jpg', 'jpeg', 'webp', 'gif'],
+                    'Vidéos': ['mp4', 'webm', 'mkv', 'mov'],
                     'Images': ['png', 'jpg', 'jpeg', 'webp', 'gif'],
                     'Tous les fichiers': ['*']
                 }
             });
             if (uris && uris.length > 0) {
                 const selected = uris[0].fsPath;
-                const isVideo = ['.mp4', '.webm', '.mkv'].some(ext => selected.toLowerCase().endsWith(ext));
+                const isVideo = ['.mp4', '.webm', '.mkv', '.mov'].some(ext => selected.toLowerCase().endsWith(ext));
                 await updateStateAndApply(selected, isVideo ? 'video' : 'image');
             }
         } else if (choice.action === 'url') {
@@ -368,7 +397,7 @@ async function activate(context) {
                         });
 
                         if (fs.existsSync(destPath) && fs.statSync(destPath).size > 0) {
-                            const isVideo = ['.mp4', '.webm', '.mkv'].some(ext => destPath.toLowerCase().endsWith(ext));
+                            const isVideo = ['.mp4', '.webm', '.mkv', '.mov'].some(ext => destPath.toLowerCase().endsWith(ext));
                             await updateStateAndApply(destPath, isVideo ? 'video' : 'image');
                         } else {
                             throw new Error('Fichier téléchargé vide ou inexistant.');
@@ -382,7 +411,7 @@ async function activate(context) {
             const { WallpaperBridge } = require('./colors/wallpaperBridge');
             const cur = WallpaperBridge.detectCurrentWallpaper();
             if (cur && fs.existsSync(cur)) {
-                const isVideo = ['.mp4', '.webm', '.mkv'].some(ext => cur.toLowerCase().endsWith(ext));
+                const isVideo = ['.mp4', '.webm', '.mkv', '.mov'].some(ext => cur.toLowerCase().endsWith(ext));
                 await updateStateAndApply(cur, isVideo ? 'video' : 'image');
             } else {
                 vscode_1.default.window.showWarningMessage('Aucun fond d\'écran actif détecté sur le bureau.');
@@ -402,7 +431,9 @@ async function activate(context) {
                     const raw = fs.readFileSync(stateFilePath, 'utf8');
                     const data = JSON.parse(raw);
                     if (data && data.path) {
-                        currentDetected = data.path;
+                        currentDetected = data.playable_path && fs.existsSync(data.playable_path)
+                            ? data.playable_path
+                            : data.path;
                     }
                 }
                 if (!currentDetected) {
@@ -411,11 +442,17 @@ async function activate(context) {
                 }
                 if (currentDetected && fs.existsSync(currentDetected)) {
                     const curCfg = wallpaper.getRawConfig();
-                    const curBase = path.basename(curCfg.videoPath || '');
-                    const newBase = path.basename(currentDetected);
-                    if (curBase !== newBase) {
+                    const samePath = (a, b) => {
+                        try {
+                            return fs.realpathSync(a) === fs.realpathSync(b);
+                        } catch (e) {
+                            return path.resolve(a || '') === path.resolve(b || '');
+                        }
+                    };
+                    if (!samePath(curCfg.videoPath, currentDetected)) {
                         wallpaper.updateConfig({ videoPath: currentDetected, enabled: true }).catch(() => {});
-                        const patchScript = path.join(homeDir, 'reseau/Perso/Bureau/Wallpaper/scripts/patch_vscode_html.py');
+                        const projectDir = process.env.WALLPAPERMAISON_DIR || path.join(homeDir, 'reseau/Perso/Bureau/Wallpaper');
+                        const patchScript = path.join(projectDir, 'scripts/patch_vscode_html.py');
                         if (fs.existsSync(patchScript)) {
                             try {
                                 require('child_process').spawnSync('python3', [patchScript, currentDetected], { timeout: 3000 });
@@ -1261,4 +1298,3 @@ async function activate(context) {
 }
 /** Called when the extension is deactivated */
 function deactivate() { }
-//# sourceMappingURL=extension.js.map

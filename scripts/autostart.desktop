@@ -2,7 +2,7 @@
 Type=Application
 Name=WallpaperMaison Daemon
 Comment=Démarrage automatique et restauration de vos fonds d'écran
-Exec=sh -c 'for p in "$HOME/reseau/Perso/Bureau/Wallpaper" "$HOME/reseau/Perso/Wallpaper" "$HOME/Wallpaper" "$HOME/Bureau/Wallpaper"; do if [ -x "$p/scripts/run.sh" ]; then exec "$p/scripts/run.sh" --daemon; fi; done'
+Exec=sh -c 'exec "$HOME/.local/bin/wallpapermaison-session-start" --daemon'
 Hidden=false
 NoDisplay=true
 X-GNOME-Autostart-enabled=true

@@ -4,6 +4,7 @@ import argparse
 import fcntl
 import logging
 import os
+import re
 import signal
 import sys
 import threading
@@ -37,13 +38,21 @@ logger = setup_logger(LOGS_DIR)
 _app_lock_file = None
 
 def acquire_app_lock() -> bool:
-    """Garantit qu'une seule instance de WallpaperMaison s'exécute à la fois par utilisateur."""
+    """Évite les doublons dans cette session graphique sans bloquer les autres sessions."""
     global _app_lock_file
     runtime_dir = os.environ.get("XDG_RUNTIME_DIR")
+    session_scope = (
+        os.environ.get("WALLPAPERMAISON_SESSION_SCOPE")
+        or os.environ.get("WAYLAND_DISPLAY")
+        or os.environ.get("DISPLAY")
+        or os.environ.get("XDG_SESSION_ID")
+        or "user"
+    )
+    session_scope = re.sub(r"[^A-Za-z0-9_.-]", "_", session_scope)
     if runtime_dir and os.path.isdir(runtime_dir):
-        lock_path = Path(runtime_dir) / "wallpapermaison_app.lock"
+        lock_path = Path(runtime_dir) / f"wallpapermaison_app_{session_scope}.lock"
     else:
-        lock_path = Path(f"/tmp/wallpapermaison_{os.getuid()}_app.lock")
+        lock_path = Path(f"/tmp/wallpapermaison_{os.getuid()}_{session_scope}_app.lock")
     try:
         _app_lock_file = open(lock_path, "w")
         fcntl.flock(_app_lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)

@@ -55,6 +55,8 @@ fi
 
 # Déploiement de notre extension personnalisée (version 99.0.0)
 if [ -n "$WP_DIR" ] && [ -d "$WP_DIR/vscode-extension" ]; then
+    export WALLPAPERMAISON_DIR="$WP_DIR"
+    export WALLPAPERMAISON_VSCODE_EXT_DIR="/var/tmp/visual_extensions/budicuy.live-wallpaper-99.0.0"
     mkdir -p "$HOME/.vscode/extensions/budicuy.live-wallpaper-99.0.0"
     cp -rf "$WP_DIR/vscode-extension"/* "$HOME/.vscode/extensions/budicuy.live-wallpaper-99.0.0/" 2>/dev/null || true
     if [ -d "$HOME/reseau/Perso/.vscode/extensions" ]; then
@@ -72,29 +74,54 @@ elif [ -d "$HOME/.vscode/extensions" ]; then
     cp -rf "$HOME/.vscode/extensions/"* /var/tmp/visual_extensions/ 2>/dev/null || true
 fi
 
+# The persistent extension directory may contain an older copy. Keep the
+# workspace build authoritative after synchronizing third-party extensions.
+if [ -n "$WP_DIR" ] && [ -d "$WP_DIR/vscode-extension" ]; then
+    mkdir -p /var/tmp/visual_extensions/budicuy.live-wallpaper-99.0.0
+    cp -rf "$WP_DIR/vscode-extension"/* /var/tmp/visual_extensions/budicuy.live-wallpaper-99.0.0/ 2>/dev/null || true
+fi
+
 # Enregistrement dans extensions.json pour que VS Code reconnaisse l'extension
 if [ -n "$WP_DIR" ] && [ -f "$WP_DIR/scripts/register_extension.py" ]; then
     python3 "$WP_DIR/scripts/register_extension.py" 2>/dev/null || true
 fi
 
-# 4. Mise à jour et injection de workbench.html
-if [ -n "$WP_DIR" ] && [ -f "$WP_DIR/scripts/patch_vscode_html.py" ]; then
-    python3 "$WP_DIR/scripts/patch_vscode_html.py" 2>/dev/null || true
-fi
-P_HTML="$HOME/reseau/Perso/.config/wallpapermaison/vscode/workbench.html"
-[ ! -f "$P_HTML" ] && P_HTML="$HOME/.config/wallpapermaison/vscode/workbench.html"
-T_HTML="/usr/apps/VSCode-linux-x64/resources/app/out/vs/code/electron-browser/workbench/workbench.html"
-
-# 5. Détection du binaire VS Code réel
+# 4. Détection du binaire et du workbench de VS Code
 VSCODE_BIN="/usr/apps/VSCode-linux-x64/code"
 if [ ! -x "$VSCODE_BIN" ]; then
-    for candidate in /usr/bin/code /usr/share/code/bin/code /usr/lib/code/code; do
+    for candidate in /usr/bin/code /usr/share/code/bin/code /usr/share/code/code /usr/lib/code/code /usr/lib/code/bin/code; do
         if [ -x "$candidate" ] && [ "$candidate" != "$HOME/.local/bin/code" ]; then
             VSCODE_BIN="$candidate"
             break
         fi
     done
 fi
+
+T_HTML=""
+if [ -x "$VSCODE_BIN" ]; then
+    VSCODE_BIN="$(readlink -f "$VSCODE_BIN" 2>/dev/null || echo "$VSCODE_BIN")"
+    search_dir="$(dirname "$VSCODE_BIN")"
+    while [ -n "$search_dir" ] && [ "$search_dir" != "/" ]; do
+        for layout in electron-browser electron-sandbox; do
+            candidate="$search_dir/resources/app/out/vs/code/$layout/workbench/workbench.html"
+            if [ -f "$candidate" ]; then
+                T_HTML="$candidate"
+                break 2
+            fi
+        done
+        search_dir="$(dirname "$search_dir")"
+    done
+fi
+
+# 5. Mise à jour et injection du workbench réellement utilisé
+if [ -n "$T_HTML" ]; then
+    export WALLPAPERMAISON_VSCODE_HTML="$T_HTML"
+fi
+if [ -n "$WP_DIR" ] && [ -f "$WP_DIR/scripts/patch_vscode_html.py" ]; then
+    python3 "$WP_DIR/scripts/patch_vscode_html.py" 2>/dev/null || true
+fi
+P_HTML="$HOME/reseau/Perso/.config/wallpapermaison/vscode/workbench.html"
+[ ! -f "$P_HTML" ] && P_HTML="$HOME/.config/wallpapermaison/vscode/workbench.html"
 
 # 6. Exécution des commandes CLI pures via le runtime Node de VS Code
 for arg in "$@"; do
@@ -111,16 +138,16 @@ done
 
 # 7. Lancement GUI avec bwrap pour injecter le fond d'écran et l'action sudo
 if command -v bwrap >/dev/null 2>&1 && [ -f "$P_HTML" ] && [ -f "$T_HTML" ] && [ -x "$VSCODE_BIN" ]; then
-    BWRAP_ARGS="--dev-bind / / --ro-bind $P_HTML $T_HTML"
+    BWRAP_ARGS=(--dev-bind / / --ro-bind "$P_HTML" "$T_HTML")
     if [ -n "$REAL_LIB" ] && [ -f "$REAL_LIB" ]; then
         if [ -f "/usr/lib64/libopenh264.so.8" ]; then
-            BWRAP_ARGS="$BWRAP_ARGS --ro-bind $REAL_LIB /usr/lib64/libopenh264.so.8"
+            BWRAP_ARGS+=(--ro-bind "$REAL_LIB" /usr/lib64/libopenh264.so.8)
         fi
         if [ -f "/usr/lib64/libopenh264.so.2.6.0" ]; then
-            BWRAP_ARGS="$BWRAP_ARGS --ro-bind $REAL_LIB /usr/lib64/libopenh264.so.2.6.0"
+            BWRAP_ARGS+=(--ro-bind "$REAL_LIB" /usr/lib64/libopenh264.so.2.6.0)
         fi
     fi
-    exec bwrap $BWRAP_ARGS "$VSCODE_BIN" --extensions-dir /var/tmp/visual_extensions "$@"
+    exec bwrap "${BWRAP_ARGS[@]}" "$VSCODE_BIN" --extensions-dir /var/tmp/visual_extensions "$@"
 elif [ -x "$VSCODE_BIN" ]; then
     exec "$VSCODE_BIN" --extensions-dir /var/tmp/visual_extensions "$@"
 else

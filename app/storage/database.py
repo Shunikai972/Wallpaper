@@ -368,8 +368,8 @@ class Database:
         """Supprime un wallpaper de la base de données."""
         conn = self._get_connection()
         with conn:
-            conn.execute("DELETE FROM wallpapers WHERE id = ?", (wallpaper_id,))
-            return True
+            cursor = conn.execute("DELETE FROM wallpapers WHERE id = ?", (wallpaper_id,))
+            return cursor.rowcount > 0
 
     def get_all_tags(self) -> List[str]:
         """Retourne la liste unique de tous les tags existants."""

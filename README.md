@@ -62,7 +62,7 @@ Cette commande clone automatiquement le dépôt (ou le met à jour), configure l
 
 Sur un nouveau PC Linux où votre session locale vient d'être créée (ou réinitialisée), le projet et tous vos réglages sont déjà présents sur votre partage réseau persistant (`~/reseau/Perso`).
 
-Pour configurer instantanément la machine sans droits `root` (création des wrappers de codecs H.264, configuration de l'autostart GNOME et systemd, liens persistants, et déploiement de l'extension VS Code), **exécutez simplement cette commande** :
+Pour configurer instantanément la machine sans droits `root` (création des wrappers de codecs H.264, configuration de l'autostart GNOME, liens persistants, et déploiement de l'extension VS Code), **exécutez simplement cette commande** :
 
 ```bash
 ~/reseau/Perso/Bureau/Wallpaper/scripts/setup.sh
@@ -79,8 +79,8 @@ Ou si vous êtes déjà positionné dans le dossier :
 3. **Environnement virtuel Python** : initialise `.venv` avec `--system-site-packages` pour accéder aux bindings natifs GTK/GObject sans compilation.
 4. **Liens symboliques persistants** : raccorde `~/.config/wallpapermaison`, `~/.local/share/wallpapermaison` et `~/.cache/wallpapermaison` vers le partage NFS.
 5. **Démarrage automatique (Autostart)** :
-   - Installe le fichier XDG `~/.config/autostart/wallpapermaison.desktop` avec boucle de résolution de chemin portable.
-   - Installe et active le service utilisateur systemd `~/.config/systemd/user/wallpapermaison.service` rattaché à `graphical-session.target`.
+   - Installe le fichier XDG `~/.config/autostart/wallpapermaison.desktop` et son lanceur local, qui attend le montage du partage réseau et démarre dans chaque session graphique.
+   - Retire l'ancien service systemd global à l'utilisateur pour éviter qu'une session ne réutilise les variables d'affichage d'une autre.
 6. **Auto-guérison Shell (`~/.bashrc.d`)** : corrige le bug de condition Debian (`/etc/apt`) dans `~/.bashrc` et installe le script d'auto-restauration dans `~/.bashrc.d/wallpapermaison.sh`.
 7. **Déploiement de l'extension VS Code** : synchronise le dossier de l'extension dans `~/.vscode/extensions/` et `/var/tmp/visual_extensions/`.
 8. **Auto-test** : valide les imports Python, le moteur de colorimétrie et le lecteur MPV.
@@ -147,7 +147,7 @@ wallpapermaison/
 │   │   ├── monitors.py             # Détection multi-écrans (xrandr, wlr-randr, sysfs)
 │   │   ├── power.py                # Surveillance batterie / secteur (sysfs, upower)
 │   │   ├── window_monitor.py       # Détection plein écran / jeux et verrouillage de session
-│   │   ├── autostart.py            # Gestion XDG Autostart (.desktop)
+│   │   ├── autostart.py            # Gestion XDG Autostart par session
 │   │   └── tray.py                 # Intégration icône System Tray
 │   ├── media/
 │   │   ├── scanner.py              # Scanner asynchrone de dossiers avec dédoublonnage hash
@@ -200,12 +200,13 @@ wallpapermaison/
 │   ├── setup.sh                    # Installation autonome & idempotente sans root pour nouveau PC
 │   ├── install.sh                  # Installeur universel interactif / one-liner
 │   ├── run.sh                      # Lanceur dynamique avec auto-guérison et attente session
+│   ├── session-start.sh            # Bootstrap local qui attend le partage réseau et l'affichage
 │   └── autostart.desktop           # Définition XDG Autostart portable
-├── tests/                          # Suite complète de tests unitaires (29/29 validés)
+├── tests/                          # Suite de tests unitaires
 │   ├── test_storage.py             # Tests SQLite et migrations
 │   ├── test_adjuster.py            # Tests traitement d'image non destructif
 │   ├── test_colorimetry.py         # Tests conversions CIE-Lab, WCAG 2.1 et garantie de contraste
-│   ├── test_autostart.py           # Tests XDG Autostart, systemd --user et persistance NFS
+│   ├── test_autostart.py           # Tests XDG Autostart et nettoyage de l'ancien service
 │   ├── test_scanner.py             # Tests scanner, metadata et miniatures
 │   ├── test_wallpaper_manager.py   # Tests orchestrateur de moteurs
 │   └── test_bridge.py              # Tests API Bridge PyWebView
@@ -290,6 +291,7 @@ Le projet intègre une version améliorée, robuste et hautement paramétrable d
 5. **Intégration non-invasive sans droits root** :
    - Mise à jour instantanée des tokens et éléments d'interface via l'API officielle VS Code (`workbench.colorCustomizations` et `editor.tokenColorCustomizations`).
    - Lecteur vidéo Webview intégré (`WebviewPlayer`) accessible même lorsque le système de fichiers est en lecture seule (`EROFS`).
+6. **Fond animé du workbench** : les vidéos sont converties en H.264 compatible Chromium, puis servies depuis `127.0.0.1` avec prise en charge des requêtes partielles. L'éditeur reste opaque tant que la vidéo n'a pas commencé à se décoder.
 
 ### ⌨️ Commandes VS Code
 * `Live Wallpaper: Open Wallpaper Player View` : Ouvre la vue Webview intégrée pour prévisualiser la vidéo et synchroniser les couleurs.
@@ -383,7 +385,7 @@ ROTATION_ORDER=random
 * **Solution apportée** :
   1. **Optimiseur vidéo matériel (`VideoOptimizer`)** : transcodage automatique vers un profil 1080p H.264 High 4.1 yuv420p à latence zéro (`-bf 0`, CRF 19) mis en cache de manière persistante sur le partage réseau `~/.cache/wallpapermaison/optimized/`.
   2. **Scanout matériel direct Wayland** : activation native de `GtkGraphicsOffload` pour contourner la composition CPU de GTK.
-  3. **Boucle native fluide & purge mémoire** : utilisation de `loop: true` natif et libération immédiate des pipelines précédents avec `oldMedia.clear()`.
+  3. **Boucle vidéo fiable & purge mémoire** : redémarrage explicite du flux GTK à sa fin, puis libération des anciens pipelines après un changement de média.
   4. **Suppression du polling NFS** : vérification locale à basse priorité (`GLib.PRIORITY_LOW` à 1000 ms), éliminant tout gel d'affichage.
 
 ---
@@ -394,7 +396,7 @@ Le projet inclut une suite de tests unitaires couvrant l'ensemble des modules (y
 ```bash
 python -m unittest discover -s tests
 ```
-*Résultat attendu : `Ran 39 tests ... OK`*
+*La commande doit se terminer par `OK`.*
 
 ---
 

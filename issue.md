@@ -53,13 +53,13 @@ Live Wallpaper: Cannot write to file — EROFS: read-only file system, access '/
 À chaque fin de boucle de lecture de la vidéo de fond d'écran sur le bureau GNOME, un écran noir furtif (black frame) d'une durée de 50 à 100 ms apparaissait.
 
 ### 3.2 Cause racine
-- Dans l'extension GNOME Shell Hanabi (`renderer/renderer.js`), le gestionnaire de fin de média (`media.connect('eos')` ou réinitialisation) procédait à la destruction complète de l'objet média Clutter/GStreamer (`media.destroy()`) puis recréait une nouvelle instance.
-- Cette destruction/recréation réinitialisait la surface graphique Mutter et purgeait le pipeline vidéo, provoquant une coupure visuelle noire pendant l'allocation du nouveau buffer.
+- Selon le backend, la fin du média n'entraînait pas une reprise fiable : `Gtk.MediaFile` pouvait rester à sa durée avec `loop: true`, tandis que `GstPlay` cherchait à la position zéro sans repasser explicitement en lecture.
+- Lors d'un changement de média, libérer l'ancien pipeline avant que la nouvelle surface ait reçu sa première image pouvait aussi produire une coupure noire.
 
 ### 3.3 Solution apportée
-- Modification de `renderer.js` : suppression de la destruction récurrente du pipeline média.
-- Implémentation d'une transition continue sans rupture via `media.seek(0); media.play();` sur l'élément existant.
-- Maintien du cache mémoire des frames vidéo pour éliminer 100% des images noires lors des transitions de boucle.
+- `Gtk.MediaFile` garde `loop: false` et redémarre sur `notify::ended` avec `seek(0)` puis `play()`.
+- `GstPlay` appelle aussi `play()` après la recherche à zéro sur le signal `end-of-stream`.
+- Lors d'un remplacement, l'ancien média est libéré après un court délai pour laisser le premier buffer du nouveau média s'afficher.
 
 ---
 
@@ -83,7 +83,7 @@ Lors d'un rechargement de la fenêtre VS Code (`Ctrl+R` ou commande `Reload Wind
   height: 100vh !important;
   object-fit: cover !important;
   opacity: 0.35 !important;
-  z-index: 999 !important;
+  z-index: 0 !important;
   pointer-events: none !important;
   display: block !important;
   ```
@@ -200,19 +200,20 @@ Lors du changement de fond d'écran (soit depuis le sélecteur VS Code, soit dep
 ### 8.2 Causes racines
 1. **Absence de pont de communication entre l'Extension Host et Monaco Workbench :**
    Dans VS Code, l'Extension Host s'exécute dans un sous-processus Node.js distinct (`UtilityProcess type: extensionHost`), sans accès direct au DOM de la fenêtre principale `workbench.html`. Auparavant, l'extension se contentait d'afficher un popup modal `vsHelp.reload()` invitant l'utilisateur à recharger la fenêtre complète.
-2. **Restrictions de sécurité de l'architecture Electron sandboxed (`vscode-file:`) :**
-   Dans le renderer sandboxed de VS Code, le protocole interne `vscode-file://vscode-app/` interdit le chargement arbitraire de fichiers hors des racines approuvées (`validRoots`). Cependant, l'analyse du binaire de VS Code a révélé que le dossier des extensions (`extensionsPath` soit `/var/tmp/visual_extensions/`) est inclus dans `validRoots`, et que l'extension `.mp4` est présente dans `validExtensions`.
+2. **Incompatibilité du transport et du codec vidéo :**
+   Dans cette installation, `vscode-file://` pouvait lire le JSON d'état mais Chromium renvoyait `MEDIA_ELEMENT_ERROR: Format error` pour le média. La conversion WebM/VP8 échouait aussi dans le décodeur fourni avec VS Code.
 
 ### 8.3 Solution apportée (Hot-Swap en Direct Sans Reload)
-1. **Génération dynamique des fichiers d'état à chaud (`live_state.json` et `live_state.js`) :**
+1. **Mise à disposition des médias et génération d'état à chaud (`live_state.json` et `live_state.js`) :**
    À chaque changement de fond d'écran (que ce soit depuis le démon WallpaperMaison, depuis le bureau Linux ou depuis l'extension VS Code), un fichier d'état partagé est immédiatement écrit dans :
    `/var/tmp/visual_extensions/budicuy.live-wallpaper-99.0.0/live_state.json` et `live_state.js`.
+   Le média est converti atomiquement en H.264 baseline MP4 sous `wallpaper-media/`, puis servi sur `127.0.0.1` avec le type MIME et les requêtes de plages d'octets attendus par Chromium.
 2. **Surveillance temps réel dans `workbench.html` (Watcher Réactif 800ms) :**
-   Une routine de polling légère intégrée dans `workbench.html` interroge le fichier d'état via l'URL autorisée :
-   `vscode-file://vscode-app/var/tmp/visual_extensions/budicuy.live-wallpaper-99.0.0/live_state.json?_t=<timestamp>`
-   (avec fallback transparent vers une balise `<script src=".../live_state.js">`).
+   Une routine de polling légère intégrée dans `workbench.html` lit l'URL stable
+   `vscode-file://vscode-app/var/tmp/visual_extensions/budicuy.live-wallpaper-99.0.0/live_state.json`
+   avec `cache: no-store`. La CSP autorise uniquement l'origine locale du serveur pour les médias. Le fallback script utilise un fragment d'URL pour éviter que le protocole ne l'interprète comme un nom de fichier.
 3. **Mise à jour directe du DOM :**
-   Dès que le chemin détecté diffère du média actif, la fonction globale `window.__applyWallpaperMaisonMedia(newPath)` est déclenchée. L'ancien élément est retiré et le nouveau média est monté et lu immédiatement dans le DOM actif.
+   Dès que le chemin détecté diffère du média actif, la fonction globale `window.__applyWallpaperMaisonMedia(newPath)` est déclenchée. L'ancien élément est retiré et la nouvelle URL HTTP locale est montée et lue dans le DOM actif. L'éditeur ne devient transparent qu'après le début du décodage.
 4. **Suppression de toutes les invites modales de rechargement :**
    Dans `extension.js`, les appels à `vsHelp.reload()` ont été remplacés par de simples notifications d'information non-intrusives ou des messages en barre d'état (`vscode.window.setStatusBarMessage(...)`).
    Le changement de fond d'écran s'applique ainsi **instantanément à chaud et sans aucune interruption de session ni rechargement**.
@@ -301,9 +302,9 @@ Sur certains fonds d'écran animés (notamment les vidéos 4K `3840x2160`, les e
 2. **I/O synchrones bloquantes sur le montage réseau NFS toutes les 250 ms** :
    - Dans `renderer.js`, la routine `initWallpaperMaisonSync` exécutait `f.load_contents(null)` de manière synchrone 4 fois par seconde directement dans le thread graphique principal de GTK4 sur le chemin NFS (`~/reseau/Perso/`).
    - La moindre micro-latence réseau ou gigue NFS gelait la boucle d'événements de GTK, bloquant l'affichage des frames vidéo.
-3. **Boucle de seek agressive et fuite de pipelines GStreamer** :
-   - L'absence de la propriété native `loop: true` sur `GtkMediaFile` déclenchait un timer à 100 ms forçant des appels répétés à `seek(0)`.
-   - Lors d'un changement de fond d'écran, l'ancien `GtkMediaFile` était mis en pause sans appel à `clear()`, maintenant ses threads de décodage actifs en arrière-plan.
+3. **Fin de média non relancée et fuite de pipelines GStreamer** :
+   - Avec `loop: true`, `GtkMediaFile` pouvait atteindre sa durée sans avancer davantage; le signal `end-of-stream` de `GstPlay` cherchait à zéro mais ne relançait pas toujours la lecture.
+   - Lors d'un changement de fond d'écran, l'ancien `GtkMediaFile` devait être libéré après l'affichage du premier buffer du nouveau média.
 4. **Composition logicielle de texture GTK au lieu du scanout direct Wayland** :
    - Le paramètre GSettings `enable-graphics-offload` était désactivé (`false`), empêchant GTK4 de déléguer la surface vidéo directement au compositeur Mutter via les sous-surfaces Wayland (`GtkGraphicsOffload`).
 
@@ -312,10 +313,10 @@ Sur certains fonds d'écran animés (notamment les vidéos 4K `3840x2160`, les e
    - Détection et transcodage transparent vers un profil optimisé matériellement : H.264 High 4.1 yuv420p à la résolution native du moniteur (1080p), CRF 19 (qualité visuelle rigoureusement identique sans perte perçue), pas de B-frames pénalisantes (`-bf 0`/latence zéro), et flag `+faststart`.
    - Débit de décodage passant de 32 FPS (insuffisant pour du 60 FPS) à plus de 90-140 FPS en lecture fluide.
    - Stockage et persistance dans le cache partagé réseau `~/.cache/wallpapermaison/optimized/`.
-2. **Décodage direct Wayland et libération de mémoire dans `renderer.js`** :
-   - Activation systématique de `Gtk.GraphicsOffload` pour un affichage direct sans copie de texture CPU.
-   - Passage en boucle continue native avec `newMedia.set({ loop: true, playing: true })` et suppression du minuteur de seek parasite.
-   - Appel explicite à `oldMedia.clear()` à chaque changement de média pour détruire immédiatement le pipeline GStreamer et ses threads.
+2. **Boucle de lecture GTK/GStreamer fiable dans `renderer.js`** :
+   - `Gtk.MediaFile` redémarre explicitement à la fin avec `loop: false`, `seek(0)` et `play()`; `GstPlay` reprend après son signal `end-of-stream`.
+   - `Gtk.GraphicsOffload` délègue l'affichage au compositeur Mutter lorsque disponible.
+   - L'ancien média est libéré après un court délai pour éviter de détruire le pipeline avant l'apparition du premier buffer du nouveau.
 3. **Suppression du blocage réseau NFS** :
    - La synchronisation dans `renderer.js` est désormais restreinte au fichier local `~/.config/wallpapermaison/current_wallpaper.json` avec priorité basse (`GLib.PRIORITY_LOW`) et intervalle espacé à 1000 ms.
 4. **Prise en charge du Flatpak Celluloid dans les wrappers système** :
@@ -374,11 +375,11 @@ Sur certains fonds d'écran animés (notamment les vidéos 4K `3840x2160`, les e
 
 | Composant | Fichier | Rôle de la correction |
 | :--- | :--- | :--- |
-| **Moteur Hanabi** | `app/wallpaper/engines/hanabi_engine.py` | Résolution automatique du flux vidéo optimisé 1080p et synchronisation GSettings. |
+| **Moteur Hanabi** | `app/wallpaper/engines/hanabi_engine.py` | Vérifie que l'horloge D-Bus avance et synchronise le renderer actif. |
 | **Optimiseur Vidéo** | `app/wallpaper/video_optimizer.py` | Moteur de conversion et cache ultra-fluide 1080p H.264 zéro-latence pour tout média lourd/4K. |
-| **GNOME Renderer** | `gnome-extension/.../renderer.js` | Comparaison de `basename`, transition de frame 300ms sans black frame, GraphicsOffload Wayland direct, loop natif. |
+| **GNOME Renderer** | `gnome-extension/.../renderer.js` | Boucle EOS explicite pour GtkMediaFile/GstPlay, lecture active publiée via D-Bus, GraphicsOffload quand disponible. |
 | **Scripts d'environnement** | `scripts/setup.sh`, `~/.local/bin/mpv`, `ffmpeg-full` | Support transparent des Flatpaks Celluloid et MPV pour un décodage complet H.264/HEVC. |
-| **Sync Daemon** | `app/automation/vscode_sync.py` | Détection de changement par `basename`, élimination de la boucle d'écho de rechargement cyclique. |
+| **Sync Daemon** | `app/automation/vscode_sync.py` | Détection du média Hanabi actif par D-Bus, comparaison des chemins réels et publication atomique de l'état VS Code. |
 | **Patch HTML** | `scripts/patch_vscode_html.py` | Transition vidéo double-buffer sans coupure, z-index 0 arrière-plan, text-shadow 0 1px 2px et voile de lisibilité sur les lignes de code. |
 | **Extension VS Code** | `vscode-extension/out/extension.js` | Synchronisation de base sécurisée, suppression des rechargements intempestifs. |
 | **Moteur de Colorimétrie** | `colorimetry.js` & `colorimetry.py` | Synthèse complète de tokens de code TextMate et ajustement adaptatif sans perte de saturation. |

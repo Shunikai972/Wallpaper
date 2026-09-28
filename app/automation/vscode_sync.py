@@ -1,20 +1,47 @@
 """Synchronisation bidirectionnelle en temps réel entre le bureau et Visual Studio Code."""
 
+import ast
 import json
 import logging
 import os
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from pathlib import Path
 from typing import Optional, Dict, Any
 
 from app.core.events import bus
+from app.automation.vscode_media import stage_media_for_vscode
+from app.automation.vscode_media_server import media_url_for
 
 logger = logging.getLogger("wallpapermaison.vscode_sync")
 
 STATE_FILE = Path.home() / ".config/wallpapermaison/current_wallpaper.json"
+
+
+def _atomic_write_text(target: Path, content: str) -> None:
+    """Publish complete state snapshots to concurrent readers."""
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=target.parent,
+            prefix=f".{target.name}.", suffix=".tmp", delete=False
+        ) as handle:
+            temp_path = Path(handle.name)
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_path, target)
+    finally:
+        if temp_path is not None:
+            try:
+                temp_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+
 
 class VsCodeSync:
     """Gestionnaire de synchronisation bidirectionnelle Desktop <-> VS Code."""
@@ -63,6 +90,7 @@ class VsCodeSync:
     def publish_state(self, file_path: str, media_type: str = "video", source: str = "desktop") -> None:
         """Écrit l'état partagé et met à jour workbench.html et le lien symbolique."""
         try:
+            vscode_media_path = stage_media_for_vscode(file_path)
             STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
             ts = time.time()
             data = {
@@ -71,15 +99,14 @@ class VsCodeSync:
                 "source": source,
                 "timestamp": ts
             }
-            with open(STATE_FILE, "w", encoding="utf-8") as f:
-                f.write(json.dumps(data, indent=2))
+            state_json = json.dumps(data, indent=2)
+            _atomic_write_text(STATE_FILE, state_json)
 
             perso_state = Path.home() / "reseau/Perso/.config/wallpapermaison/current_wallpaper.json"
             if perso_state.resolve() != STATE_FILE.resolve():
                 try:
                     perso_state.parent.mkdir(parents=True, exist_ok=True)
-                    with open(perso_state, "w", encoding="utf-8") as f:
-                        f.write(json.dumps(data, indent=2))
+                    _atomic_write_text(perso_state, state_json)
                 except Exception:
                     pass
 
@@ -87,9 +114,10 @@ class VsCodeSync:
             self._last_written_path = str(file_path)
 
             # Écriture instantanée des fichiers live_state pour mise à jour à chaud de VS Code sans reload
-            live_json_data = json.dumps({"path": str(file_path), "media_type": media_type, "timestamp": ts}, indent=2)
+            vscode_media_url = media_url_for(vscode_media_path)
+            live_json_data = json.dumps({"path": vscode_media_url, "media_type": media_type, "timestamp": ts}, indent=2)
             live_js_code = f""";(function() {{
-    var p = {repr(str(file_path))};
+    var p = {json.dumps(vscode_media_url, ensure_ascii=True)};
     if (typeof window.__applyWallpaperMaisonMedia === 'function') {{
         window.__applyWallpaperMaisonMedia(p);
     }}
@@ -103,8 +131,8 @@ class VsCodeSync:
             ]:
                 try:
                     target_dir.mkdir(parents=True, exist_ok=True)
-                    (target_dir / "live_state.json").write_text(live_json_data, encoding="utf-8")
-                    (target_dir / "live_state.js").write_text(live_js_code, encoding="utf-8")
+                    _atomic_write_text(target_dir / "live_state.json", live_json_data)
+                    _atomic_write_text(target_dir / "live_state.js", live_js_code)
                 except Exception:
                     pass
 
@@ -139,9 +167,27 @@ class VsCodeSync:
     def _get_hanabi_video_path(self) -> Optional[str]:
         """Récupère le chemin vidéo actuellement configuré dans Hanabi GNOME Shell."""
         import shutil
+        if shutil.which("gdbus"):
+            try:
+                result = subprocess.run(
+                    [
+                        "gdbus", "call", "--session", "--dest", "io.github.jeffshee.HanabiRenderer",
+                        "--object-path", "/io/github/jeffshee/HanabiRenderer",
+                        "--method", "io.github.jeffshee.HanabiRenderer.getFilePath",
+                    ],
+                    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=1,
+                )
+                if result.returncode == 0:
+                    reply = ast.literal_eval(result.stdout.strip())
+                    active_path = reply[0] if isinstance(reply, tuple) and reply else ""
+                    if active_path and os.path.exists(active_path):
+                        return active_path
+            except (OSError, SyntaxError, ValueError, subprocess.SubprocessError):
+                pass
+
         if not shutil.which("gsettings"):
             return None
-        # Essai direct
+        # GSettings fallback for older renderer versions.
         try:
             res = subprocess.run(
                 ["gsettings", "get", "io.github.jeffshee.hanabi-extension", "video-path"],
@@ -179,9 +225,11 @@ class VsCodeSync:
             try:
                 hanabi_val = self._get_hanabi_video_path()
                 if hanabi_val:
-                    hanabi_base = os.path.basename(hanabi_val)
-                    last_base = os.path.basename(self._last_written_path) if self._last_written_path else ""
-                    if hanabi_base != last_base:
+                    try:
+                        same_path = os.path.realpath(hanabi_val) == os.path.realpath(self._last_written_path)
+                    except (OSError, TypeError):
+                        same_path = os.path.abspath(hanabi_val) == os.path.abspath(self._last_written_path)
+                    if not same_path:
                         logger.info("Changement de fond d'écran détecté depuis Hanabi bureau : %s", hanabi_val)
                         self.publish_state(hanabi_val, media_type="video", source="desktop")
             except Exception as e:

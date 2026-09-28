@@ -51,7 +51,7 @@ class GnomeWallpaperEngine(BaseWallpaperEngine):
                 logger.error("Échec génération miniature GNOME: %s", e)
                 return False
 
-        file_uri = f"file://{target_path}"
+        file_uri = target_path.as_uri()
         fit_mode = (options or {}).get("fit_mode", "zoom") # 'zoom', 'scaled', 'centered', 'stretched'
         if fit_mode == "fill":
             fit_mode = "zoom"

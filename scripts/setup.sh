@@ -67,9 +67,9 @@ mkdir -p "${HOME}/.local/bin"
 mkdir -p "${HOME}/.local/share/applications"
 mkdir -p "${HOME}/.local/share/icons/hicolor/scalable/apps"
 mkdir -p "${HOME}/.config/autostart"
-mkdir -p "${HOME}/.config/systemd/user/graphical-session.target.wants"
 
 export PATH="${HOME}/.local/bin:${SCRIPT_DIR}/scripts:${PATH}"
+install -m 755 "${SCRIPT_DIR}/scripts/session-start.sh" "${HOME}/.local/bin/wallpapermaison-session-start"
 
 # ------------------------------------------------------------------------------
 # 4. Dépendances multimédia & Wrappers Flatpak (MPV & FFmpeg avec codecs complets)
@@ -236,7 +236,7 @@ Type=Application
 Name=WallpaperMaison
 GenericName=Gestionnaire de Fonds d'Écran
 Comment=Alternative moderne à Wallpaper Engine pour Linux
-Exec=bash -c 'for d in "$HOME/reseau/Perso/Bureau/Wallpaper" "$HOME/Bureau/Wallpaper" "$HOME/Wallpaper"; do if [ -x "$d/scripts/run.sh" ]; then exec "$d/scripts/run.sh" %F; fi; done'
+Exec=${SCRIPT_DIR}/scripts/run.sh %F
 Icon=wallpapermaison
 Terminal=false
 Categories=Utility;Settings;DesktopSettings;
@@ -252,32 +252,23 @@ cat << 'EOF_AUTO' > "${AUTOSTART_FILE}"
 Type=Application
 Name=WallpaperMaison Daemon
 Comment=Démarrage automatique et restauration de vos fonds d'écran
-Exec=bash -c 'for d in "$HOME/reseau/Perso/Bureau/Wallpaper" "$HOME/Bureau/Wallpaper" "$HOME/Wallpaper"; do if [ -x "$d/scripts/run.sh" ]; then exec "$d/scripts/run.sh" --daemon; fi; done'
+Exec=${HOME}/.local/bin/wallpapermaison-session-start --daemon
 Hidden=false
 NoDisplay=true
 X-GNOME-Autostart-enabled=true
 X-GNOME-Autostart-Delay=2
 EOF_AUTO
 
-# 7.3 Service Systemd utilisateur
+# 7.3 Retrait de l'ancien service global à l'utilisateur. XDG Autostart démarre
+# le lanceur dans chaque session graphique, avec ses propres variables d'écran.
 SYSTEMD_FILE="${HOME}/.config/systemd/user/wallpapermaison.service"
-cat << 'EOF_SRV' > "${SYSTEMD_FILE}"
-[Unit]
-Description=WallpaperMaison Service de Fond d'Écran
-After=graphical-session.target gnome-session.target
-PartOf=graphical-session.target
-
-[Service]
-Type=simple
-ExecStart=bash -c 'for d in "$HOME/reseau/Perso/Bureau/Wallpaper" "$HOME/Bureau/Wallpaper" "$HOME/Wallpaper"; do if [ -x "$d/scripts/run.sh" ]; then exec "$d/scripts/run.sh" --daemon; fi; done'
-Restart=on-failure
-RestartSec=5
-
-[Install]
-WantedBy=graphical-session.target
-EOF_SRV
-
-ln -sf "${SYSTEMD_FILE}" "${HOME}/.config/systemd/user/graphical-session.target.wants/wallpapermaison.service"
+SYSTEMD_WANTS="${HOME}/.config/systemd/user/graphical-session.target.wants/wallpapermaison.service"
+systemctl --user disable --now wallpapermaison.service 2>/dev/null || true
+rm -f "${SYSTEMD_WANTS}" "${SYSTEMD_FILE}"
+if [ "$IS_PERSISTENT" = true ]; then
+    rm -f "${PERSISTENT_NFS}/.config/systemd/user/graphical-session.target.wants/wallpapermaison.service"
+    rm -f "${PERSISTENT_NFS}/.config/systemd/user/wallpapermaison.service"
+fi
 systemctl --user daemon-reload 2>/dev/null || true
 
 # Copie miroir sur le NFS persistant si différent
@@ -287,13 +278,8 @@ if [ "$IS_PERSISTENT" = true ]; then
         cp "${AUTOSTART_FILE}" "${PERSISTENT_NFS}/.config/autostart/wallpapermaison.desktop"
     fi
 
-    mkdir -p "${PERSISTENT_NFS}/.config/systemd/user/graphical-session.target.wants"
-    if [ "$(realpath "${HOME}/.config/systemd/user")" != "$(realpath "${PERSISTENT_NFS}/.config/systemd/user")" ]; then
-        cp "${SYSTEMD_FILE}" "${PERSISTENT_NFS}/.config/systemd/user/wallpapermaison.service"
-        ln -sf "${PERSISTENT_NFS}/.config/systemd/user/wallpapermaison.service" "${PERSISTENT_NFS}/.config/systemd/user/graphical-session.target.wants/wallpapermaison.service" 2>/dev/null || true
-    fi
 fi
-echo "✓ Démarrage automatique configuré (GNOME .desktop + systemd --user)."
+echo "✓ Démarrage automatique configuré pour chaque session graphique (XDG Autostart)."
 
 # ------------------------------------------------------------------------------
 # 8. Réparation ~/.bashrc et script d'auto-guérison ~/.bashrc.d
@@ -350,15 +336,6 @@ if [ -n "${WP_DIR:-}" ] && [ -d "$WP_DIR" ]; then
         fi
     fi
 
-    # Auto-guérison du service systemd si absent
-    if [ ! -f "${HOME}/.config/systemd/user/wallpapermaison.service" ]; then
-        mkdir -p "${HOME}/.config/systemd/user/graphical-session.target.wants" 2>/dev/null
-        if [ -f "${HOME}/reseau/Perso/.config/systemd/user/wallpapermaison.service" ]; then
-            cp "${HOME}/reseau/Perso/.config/systemd/user/wallpapermaison.service" "${HOME}/.config/systemd/user/" 2>/dev/null || true
-            ln -sf "${HOME}/.config/systemd/user/wallpapermaison.service" "${HOME}/.config/systemd/user/graphical-session.target.wants/wallpapermaison.service" 2>/dev/null || true
-            systemctl --user daemon-reload 2>/dev/null || true
-        fi
-    fi
 fi
 EOF_BASHRC_D
 
