@@ -16,7 +16,7 @@ const colorEngine_1 = require("../colors/colorEngine");
 const DEFAULTS = {
     videoPath: '',
     opacity: 0.1,
-    size: 'cover',
+    size: 'fill',
     loop: true,
     enabled: true,
 };
@@ -226,9 +226,29 @@ class LiveWallpaper {
         try {
             const patchScript = path.join(home, 'reseau/Perso/Bureau/Wallpaper/scripts/patch_vscode_html.py');
             if (fs.existsSync(patchScript)) {
-                require('child_process').spawn('python3', [patchScript, config.videoPath], { detached: true, stdio: 'ignore' }).unref();
+                await new Promise((resolve, reject) => {
+                    const child = require('child_process').spawn('python3', [patchScript, config.videoPath], { stdio: 'ignore' });
+                    const timeout = setTimeout(() => {
+                        child.kill();
+                        reject(new Error('Timed out while generating the VS Code wallpaper workbench.'));
+                    }, 180000);
+                    child.once('error', (error) => {
+                        clearTimeout(timeout);
+                        reject(error);
+                    });
+                    child.once('close', (code) => {
+                        clearTimeout(timeout);
+                        if (code === 0) resolve();
+                        else reject(new Error(`Workbench generation exited with code ${code}.`));
+                    });
+                });
+            } else if (!fs.existsSync(this.htmlFile.filePath)) {
+                return false;
             }
-        } catch (e) {}
+        } catch (e) {
+            vscode_1.default.window.showErrorMessage(`Live Wallpaper: Could not prepare the VS Code wallpaper: ${e.message}`);
+            return false;
+        }
 
         // 3. Vérifier si workbench.html système est en lecture seule
         let isWritable = false;

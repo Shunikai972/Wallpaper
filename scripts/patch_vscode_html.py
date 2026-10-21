@@ -133,6 +133,99 @@ def find_workbench_html() -> Path:
     )
 
 
+def _strip_json_comments(source: str) -> str:
+    """Remove JSONC comments without mistaking comment markers inside strings."""
+    result = []
+    index = 0
+    in_string = False
+    escaped = False
+    line_comment = False
+    block_comment = False
+    while index < len(source):
+        char = source[index]
+        next_char = source[index + 1] if index + 1 < len(source) else ""
+        if line_comment:
+            if char == "\n":
+                line_comment = False
+                result.append(char)
+            index += 1
+            continue
+        if block_comment:
+            if char == "*" and next_char == "/":
+                block_comment = False
+                index += 2
+            else:
+                if char == "\n":
+                    result.append(char)
+                index += 1
+            continue
+        if in_string:
+            result.append(char)
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            index += 1
+            continue
+        if char == '"':
+            in_string = True
+            result.append(char)
+            index += 1
+        elif char == "/" and next_char == "/":
+            line_comment = True
+            index += 2
+        elif char == "/" and next_char == "*":
+            block_comment = True
+            index += 2
+        else:
+            result.append(char)
+            index += 1
+    return "".join(result)
+
+
+def get_wallpaper_object_fit() -> str:
+    """Respect the VS Code wallpaper size preference, defaulting to full stretch."""
+    settings_files = [
+        Path.home() / ".config/Code/User/settings.json",
+        Path.home() / "reseau/Perso/.config/Code/User/settings.json",
+    ]
+    for settings_file in settings_files:
+        try:
+            source = _strip_json_comments(settings_file.read_text(encoding="utf-8"))
+            settings = json.loads(re.sub(r",\s*([}\]])", r"\1", source))
+            wallpaper = settings.get("liveWallpaper", {})
+            size = wallpaper.get("size") if isinstance(wallpaper, dict) else None
+            size = size or settings.get("liveWallpaper.size")
+            if size in {"cover", "contain", "fill"}:
+                return size
+            if size == "auto":
+                return "fill"
+        except (OSError, json.JSONDecodeError, AttributeError, TypeError):
+            continue
+    return "fill"
+
+
+def _add_csp_sources(content: str, directive: str, sources: list[str]) -> tuple[str, bool]:
+    """Add sources to a CSP directive once, preserving unrelated directives."""
+    pattern = re.compile(
+        rf"(?P<head>(?<![\w-]){re.escape(directive)})(?=[\s;])(?P<body>[^;]*);",
+        re.DOTALL,
+    )
+    found = False
+
+    def add_missing(match: re.Match) -> str:
+        nonlocal found
+        found = True
+        existing = set(match.group("body").split())
+        missing = [source for source in sources if source and source not in existing]
+        prefix = " " + " ".join(missing) if missing else ""
+        return f"{match.group('head')}{prefix}{match.group('body')};"
+
+    return pattern.sub(add_missing, content), found
+
+
 def update_live_state(video_path: str, media_type: str = "video") -> None:
     """Met à jour les fichiers live_state (.json et .js) dans les extensions autorisées par VS Code."""
     import time
@@ -181,6 +274,7 @@ def patch_workbench(video_path: str = None) -> bool:
     if media_parts.scheme == "http" and media_parts.hostname in {"127.0.0.1", "localhost", "::1"}:
         local_media_origin = f"{media_parts.scheme}://{media_parts.netloc}"
     vsc_url = vscode_media_url
+    wallpaper_object_fit = get_wallpaper_object_fit()
 
     # Mise à jour cohérente de current_wallpaper.json et live_state (.json et .js)
     state_files = [
@@ -205,18 +299,23 @@ def patch_workbench(video_path: str = None) -> bool:
     content = orig_path.read_text(encoding="utf-8")
 
     # 1. Mise à jour CSP pour autoriser les médias locaux, scripts d'extension et connexions locales
-    content = content.replace("script-src", "script-src 'unsafe-inline' vscode-file:")
-    content = content.replace(
-        "media-src",
-        f"media-src 'self' vscode-file: vscode-remote-resource: {local_media_origin} https: blob: data:",
-    )
-    content = content.replace("img-src", "img-src 'self' vscode-file: vscode-remote-resource: https: blob: data:")
-    if "connect-src" in content:
-        content = content.replace("connect-src", "connect-src 'self' vscode-file: vscode-remote-resource: https: ws:")
-    else:
-        content = content.replace(
-            "default-src\n\t\t\t\t\t'none'\n\t\t\t\t;",
-            "default-src 'none';\n\t\t\t\tconnect-src 'self' vscode-file: vscode-remote-resource: https: ws: http:;"
+    content, _ = _add_csp_sources(content, "script-src", ["'unsafe-inline'", "vscode-file:"])
+    content, _ = _add_csp_sources(content, "media-src", [
+        "'self'", "vscode-file:", "vscode-remote-resource:", local_media_origin,
+        "https:", "blob:", "data:",
+    ])
+    content, _ = _add_csp_sources(content, "img-src", [
+        "'self'", "vscode-file:", "vscode-remote-resource:", "https:", "blob:", "data:",
+    ])
+    content, has_connect_src = _add_csp_sources(content, "connect-src", [
+        "'self'", "vscode-file:", "vscode-remote-resource:", "https:", "ws:",
+    ])
+    if not has_connect_src:
+        content = re.sub(
+            r"default-src\s+'none'\s*;",
+            "default-src 'none';\\n\\t\\t\\t\\tconnect-src 'self' vscode-file: vscode-remote-resource: https: ws: http:;",
+            content,
+            count=1,
         )
     content = re.sub(r"require-trusted-types-for[^;]*;", "", content)
     content = re.sub(r"trusted-types[^;]*;", "", content)
@@ -237,6 +336,10 @@ def patch_workbench(video_path: str = None) -> bool:
     body.wallpapermaison-live-ready .monaco-workbench .part.editor > .content,
     body.wallpapermaison-live-ready .monaco-workbench .part.editor .editor-group-container,
     body.wallpapermaison-live-ready .monaco-workbench .part.editor .editor-group-watermark,
+    /* The primary grid is a sibling of .part.editor and otherwise stays opaque. */
+    body.wallpapermaison-live-ready .monaco-workbench .monaco-grid-view,
+    body.wallpapermaison-live-ready .monaco-workbench .monaco-grid-view .monaco-grid-branch-node,
+    body.wallpapermaison-live-ready .monaco-workbench .monaco-grid-view .split-view-view,
     body.wallpapermaison-live-ready .monaco-workbench .part.editor .monaco-grid-view,
     body.wallpapermaison-live-ready .monaco-workbench .part.editor .monaco-grid-branch-node,
     body.wallpapermaison-live-ready .monaco-workbench .part.editor .empty,
@@ -280,7 +383,7 @@ def patch_workbench(video_path: str = None) -> bool:
         left: 0 !important;
         width: 100vw !important;
         height: 100vh !important;
-        object-fit: cover !important;
+        object-fit: {wallpaper_object_fit} !important;
         opacity: 0.35 !important;
         z-index: 0 !important;
         pointer-events: none !important;
@@ -405,6 +508,18 @@ def patch_workbench(video_path: str = None) -> bool:
     function applyMedia(rawSrc) {{
         if (!rawSrc) return;
         var src = toVscUrl(rawSrc);
+
+        // Keep one decoder per requested wallpaper while its first frame loads.
+        // The element gets its public id only after decoding, so the body
+        // observer otherwise treats it as missing and starts duplicate videos.
+        if (pendingMedia && document.body.contains(pendingMedia)) {{
+            var pendingSrc = pendingMedia.currentSrc || pendingMedia.src || '';
+            if (normalizeMediaPath(pendingSrc) === normalizeMediaPath(src)) return;
+            try {{ pendingMedia.pause(); }} catch (e) {{}}
+            try {{ pendingMedia.remove(); }} catch (e) {{}}
+            pendingMedia = null;
+        }}
+
         var oldVid = document.getElementById(LW_VIDEO_ID);
         var oldImg = document.getElementById(LW_IMG_ID);
         var sameMedia = normalizeMediaPath(currentRawPath) === normalizeMediaPath(rawSrc);
@@ -423,13 +538,14 @@ def patch_workbench(video_path: str = None) -> bool:
         failedMediaPath = '';
 
         var targetOpacity = '0.35';
+        var objectFit = {json.dumps(wallpaper_object_fit)};
         var commonStyle = [
             'position: fixed !important',
             'top: 0 !important',
             'left: 0 !important',
             'width: 100vw !important',
             'height: 100vh !important',
-            'object-fit: cover !important',
+            'object-fit: ' + objectFit + ' !important',
             'z-index: 0 !important',
             'pointer-events: none !important',
             'display: block !important',
@@ -453,33 +569,43 @@ def patch_workbench(video_path: str = None) -> bool:
 
             // Double-buffering : on démarre à opacity 0 si un ancien média est déjà actif pour éliminer le blackscreen
             var hasPrevious = !!(oldVid || oldImg);
+            pendingMedia = newVideo;
             newVideo.style.cssText = commonStyle + '; opacity: ' + (hasPrevious ? '0' : targetOpacity) + ' !important;';
 
             var cleanedUp = false;
+            var readyScheduled = false;
             function onMediaReady() {{
-                if (cleanedUp) return;
-                cleanedUp = true;
-                console.log("[WallpaperMaison] Vidéo prête dans VS Code:", newVideo.currentSrc, newVideo.videoWidth + 'x' + newVideo.videoHeight);
-                document.body.classList.add('wallpapermaison-live-ready');
-                newVideo.id = LW_VIDEO_ID;
-                newVideo.style.opacity = targetOpacity;
-                if (oldVid && oldVid !== newVideo) {{
-                    oldVid.style.opacity = '0';
-                    setTimeout(function() {{ try {{ oldVid.remove(); }} catch(e) {{}} }}, 350);
-                }}
-                if (oldImg) {{
-                    oldImg.style.opacity = '0';
-                    setTimeout(function() {{ try {{ oldImg.remove(); }} catch(e) {{}} }}, 350);
+                if (cleanedUp || readyScheduled || pendingMedia !== newVideo) return;
+                readyScheduled = true;
+                var reveal = function() {{
+                    if (cleanedUp || pendingMedia !== newVideo) return;
+                    cleanedUp = true;
+                    pendingMedia = null;
+                    console.log("[WallpaperMaison] Vidéo prête dans VS Code:", newVideo.currentSrc, newVideo.videoWidth + 'x' + newVideo.videoHeight);
+                    document.body.classList.add('wallpapermaison-live-ready');
+                    newVideo.id = LW_VIDEO_ID;
+                    newVideo.style.opacity = targetOpacity;
+                    if (oldVid && oldVid !== newVideo) {{
+                        oldVid.style.opacity = '0';
+                        setTimeout(function() {{ try {{ oldVid.remove(); }} catch(e) {{}} }}, 350);
+                    }}
+                    if (oldImg) {{
+                        oldImg.style.opacity = '0';
+                        setTimeout(function() {{ try {{ oldImg.remove(); }} catch(e) {{}} }}, 350);
+                    }}
+                }};
+                if (typeof newVideo.requestVideoFrameCallback === 'function') {{
+                    newVideo.requestVideoFrameCallback(reveal);
+                }} else {{
+                    requestAnimationFrame(reveal);
                 }}
             }}
 
             newVideo.oncanplay = function() {{
                 if (newVideo.paused) newVideo.play().catch(function() {{}});
-                onMediaReady();
             }};
             newVideo.onloadeddata = function() {{
                 if (newVideo.paused) newVideo.play().catch(function() {{}});
-                onMediaReady();
             }};
             newVideo.onplaying = function() {{
                 onMediaReady();
@@ -489,6 +615,8 @@ def patch_workbench(video_path: str = None) -> bool:
                 newVideo.play().catch(function() {{}});
             }};
             newVideo.onerror = function(e) {{
+                if (pendingMedia !== newVideo) return;
+                pendingMedia = null;
                 var mediaError = newVideo.error;
                 var diagnostic = {{
                     path: rawSrc,
@@ -513,7 +641,7 @@ def patch_workbench(video_path: str = None) -> bool:
 
             // Remove an undecodable media source without making the whole workbench transparent.
             setTimeout(function() {{
-                if (!cleanedUp && document.body.contains(newVideo) && newVideo.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {{
+                if (pendingMedia === newVideo && !cleanedUp && document.body.contains(newVideo)) {{
                     console.warn("[WallpaperMaison] Délai de décodage dépassé:", {{
                         path: rawSrc,
                         currentSrc: newVideo.currentSrc,
@@ -522,16 +650,20 @@ def patch_workbench(video_path: str = None) -> bool:
                         networkState: newVideo.networkState
                     }});
                     failedMediaPath = normalizeMediaPath(rawSrc);
+                    pendingMedia = null;
                     try {{ newVideo.remove(); }} catch(e) {{}}
                     if (!oldVid && !oldImg) document.body.classList.remove('wallpapermaison-live-ready');
                 }}
-            }}, 10000);
+            }}, 15000);
 
         }} else {{
             var newImg = document.createElement('img');
             var hasPrevious = !!(oldVid || oldImg);
+            pendingMedia = newImg;
             newImg.style.cssText = commonStyle + '; opacity: ' + (hasPrevious ? '0' : targetOpacity) + ' !important;';
             newImg.onload = function() {{
+                if (pendingMedia !== newImg) return;
+                pendingMedia = null;
                 document.body.classList.add('wallpapermaison-live-ready');
                 newImg.id = LW_IMG_ID;
                 newImg.style.opacity = targetOpacity;
@@ -545,6 +677,8 @@ def patch_workbench(video_path: str = None) -> bool:
                 }}
             }};
             newImg.onerror = function() {{
+                if (pendingMedia !== newImg) return;
+                pendingMedia = null;
                 failedMediaPath = normalizeMediaPath(rawSrc);
                 try {{ newImg.remove(); }} catch(e) {{}}
                 if (!oldVid && !oldImg) document.body.classList.remove('wallpapermaison-live-ready');
@@ -557,6 +691,7 @@ def patch_workbench(video_path: str = None) -> bool:
     window.__applyWallpaperMaisonMedia = applyMedia;
 
     function ensureMedia() {{
+        if (pendingMedia && document.body.contains(pendingMedia)) return;
         var vid = document.getElementById(LW_VIDEO_ID);
         var img = document.getElementById(LW_IMG_ID);
         if (!vid && !img) {{
@@ -705,6 +840,7 @@ def patch_workbench(video_path: str = None) -> bool:
     }}
 
     var failedMediaPath = '';
+    var pendingMedia = null;
     var initialized = false;
     function init() {{
         if (initialized || !document.body) return;
@@ -750,6 +886,30 @@ def patch_workbench(video_path: str = None) -> bool:
 
     content = content.replace("</html>", patch_code + "\n</html>")
 
+    # Keep the patched HTML and its relative JS beside each other. The launcher
+    # bind-mounts this directory into VS Code so atomic HTML replacement remains
+    # visible inside an already-running Bubblewrap namespace.
+    workbench_js = orig_path.with_name("workbench.js")
+    try:
+        workbench_js_content = workbench_js.read_text(encoding="utf-8")
+    except OSError:
+        workbench_js_content = None
+
+    overlay_dirs = [
+        Path.home() / "reseau/Perso/.config/wallpapermaison/vscode/workbench",
+        Path.home() / ".config/wallpapermaison/vscode/workbench",
+    ]
+    overlay_written = False
+    for target_dir in overlay_dirs:
+        try:
+            atomic_write_text(target_dir / "workbench.html", content)
+            if workbench_js_content is not None:
+                atomic_write_text(target_dir / "workbench.js", workbench_js_content)
+                overlay_written = True
+        except Exception:
+            pass
+
+    # Keep legacy copies for installations or launchers that still bind one file.
     targets = [
         Path.home() / "reseau/Perso/.config/wallpapermaison/vscode/workbench.html",
         Path.home() / ".config/wallpapermaison/vscode/workbench.html",
@@ -760,12 +920,11 @@ def patch_workbench(video_path: str = None) -> bool:
     for t in targets:
         try:
             t.parent.mkdir(parents=True, exist_ok=True)
-            with open(t, "w", encoding="utf-8") as f:
-                f.write(content)
+            atomic_write_text(t, content)
         except Exception:
             pass
 
-    return True
+    return overlay_written
 
 def patch_preload() -> bool:
     # Ne PAS patcher preload.js dans le bac à sable Electron (sandbox)

@@ -117,8 +117,17 @@ fi
 if [ -n "$T_HTML" ]; then
     export WALLPAPERMAISON_VSCODE_HTML="$T_HTML"
 fi
+PATCH_OK=0
 if [ -n "$WP_DIR" ] && [ -f "$WP_DIR/scripts/patch_vscode_html.py" ]; then
-    python3 "$WP_DIR/scripts/patch_vscode_html.py" 2>/dev/null || true
+    if python3 "$WP_DIR/scripts/patch_vscode_html.py"; then
+        PATCH_OK=1
+    else
+        echo "WallpaperMaison: VS Code workbench patch generation failed; starting VS Code without the wallpaper overlay." >&2
+    fi
+fi
+P_HTML_DIR="$HOME/reseau/Perso/.config/wallpapermaison/vscode/workbench"
+if [ ! -f "$P_HTML_DIR/workbench.html" ] || [ ! -f "$P_HTML_DIR/workbench.js" ]; then
+    P_HTML_DIR="$HOME/.config/wallpapermaison/vscode/workbench"
 fi
 P_HTML="$HOME/reseau/Perso/.config/wallpapermaison/vscode/workbench.html"
 [ ! -f "$P_HTML" ] && P_HTML="$HOME/.config/wallpapermaison/vscode/workbench.html"
@@ -137,8 +146,15 @@ for arg in "$@"; do
 done
 
 # 7. Lancement GUI avec bwrap pour injecter le fond d'écran et l'action sudo
-if command -v bwrap >/dev/null 2>&1 && [ -f "$P_HTML" ] && [ -f "$T_HTML" ] && [ -x "$VSCODE_BIN" ]; then
-    BWRAP_ARGS=(--dev-bind / / --ro-bind "$P_HTML" "$T_HTML")
+if command -v bwrap >/dev/null 2>&1 && [ -f "$T_HTML" ] && [ -x "$VSCODE_BIN" ] && [ "$PATCH_OK" -eq 1 ]; then
+    BWRAP_ARGS=(--dev-bind / /)
+    if [ -f "$P_HTML_DIR/workbench.html" ] && [ -f "$P_HTML_DIR/workbench.js" ]; then
+        BWRAP_ARGS+=(--ro-bind "$P_HTML_DIR" "$(dirname "$T_HTML")")
+    elif [ -f "$P_HTML" ]; then
+        BWRAP_ARGS+=(--ro-bind "$P_HTML" "$T_HTML")
+    else
+        exec "$VSCODE_BIN" --extensions-dir /var/tmp/visual_extensions "$@"
+    fi
     if [ -n "$REAL_LIB" ] && [ -f "$REAL_LIB" ]; then
         if [ -f "/usr/lib64/libopenh264.so.8" ]; then
             BWRAP_ARGS+=(--ro-bind "$REAL_LIB" /usr/lib64/libopenh264.so.8)

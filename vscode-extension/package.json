@@ -232,7 +232,7 @@
 					"default": {
 						"videoPath": "",
 						"opacity": 0.1,
-						"size": "cover",
+						"size": "fill",
 						"enabled": true,
 						"loop": true
 					},
@@ -251,7 +251,7 @@
 						},
 						"size": {
 							"type": "string",
-							"default": "cover",
+							"default": "fill",
 							"enum": [
 								"cover",
 								"contain",
