@@ -157,9 +157,26 @@ class WallpaperManager:
             bus.emit("wallpaper_changed", wallpaper=wp, monitor=monitor, engine=engine.name)
             return True
         else:
-            logger.warning("Échec de l'application via %s, tentative avec le moteur de secours.", engine.name)
-            self.engines["fallback"].apply(effective_path, monitor=monitor, options=merged_opts)
-            self._current_wallpapers[monitor] = wp
+            logger.warning("Échec de l'application via %s, tentative avec les moteurs alternatifs.", engine.name)
+            applied_alt = False
+            if media_type == "video":
+                for alt_name in ("gtk_video", "mpvpaper"):
+                    if alt_name != engine.name and self.engines[alt_name].is_available():
+                        logger.info("Tentative de secours vidéo via '%s'", alt_name)
+                        if self.engines[alt_name].apply(effective_path, monitor=monitor, options=merged_opts):
+                            self._active_engine_name = alt_name
+                            self._current_wallpapers[monitor] = wp
+                            self._is_paused = False
+                            db.record_applied(wallpaper_id, monitor=monitor)
+                            self._sync_vscode(effective_path)
+                            bus.emit("wallpaper_changed", wallpaper=wp, monitor=monitor, engine=alt_name)
+                            return True
+            if not applied_alt:
+                self.engines["fallback"].apply(effective_path, monitor=monitor, options=merged_opts)
+                self._current_wallpapers[monitor] = wp
+                # Toujours synchroniser VS Code même si le fond bureau externe a échoué
+                if media_type == "video":
+                    self._sync_vscode(effective_path)
             return False
 
     def pause(self, monitor: str = "all") -> bool:
@@ -257,6 +274,15 @@ class WallpaperManager:
                 wp_id = wps[0]["id"]
                 logger.info("Application du premier fond d'écran disponible (ID: %s)", wp_id)
                 return self.apply_wallpaper(wp_id)
+
+            # 4. Fallback sur le dossier Wallpaper du dépôt
+            from app.core.config import REPO_ROOT
+            repo_wp_dir = REPO_ROOT / "Wallpaper"
+            if repo_wp_dir.is_dir():
+                vids = sorted(list(repo_wp_dir.glob("*.mp4")) + list(repo_wp_dir.glob("*.webm")))
+                if vids:
+                    logger.info("Application du premier fond d'écran du dépôt: %s", vids[0])
+                    return self.apply_wallpaper_by_path(str(vids[0]))
         except Exception as e:
             logger.error("Erreur lors de la restauration du fond d'écran: %s", e)
         return False

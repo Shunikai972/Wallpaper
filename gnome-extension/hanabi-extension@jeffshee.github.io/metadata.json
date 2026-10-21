@@ -5,7 +5,13 @@
   "settings-schema": "io.github.jeffshee.hanabi-extension",
   "session-modes": ["user", "unlock-dialog"],
   "shell-version": [
-    "50"
+    "45",
+    "46",
+    "47",
+    "48",
+    "49",
+    "50",
+    "51"
   ],
   "url": "https://github.com/jeffshee/gnome-ext-hanabi",
   "uuid": "hanabi-extension@jeffshee.github.io",

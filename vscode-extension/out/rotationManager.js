@@ -14,7 +14,7 @@ try {
 class RotationManager {
     constructor(onApplyWallpaper) {
         this.onApplyWallpaper = onApplyWallpaper;
-        this.home = process.env.HOME || '/var/home/' + (process.env.USER || 'E256190S');
+        this.home = process.env.HOME || (process.env.USER ? (fs.existsSync('/var/home/' + process.env.USER) ? '/var/home/' + process.env.USER : '/home/' + process.env.USER) : '');
         this.settings = {
             enabled: false,
             intervalMinutes: 5,
@@ -30,27 +30,59 @@ class RotationManager {
     }
 
     /**
+     * Recherche dynamique du dossier du projet WallpaperMaison
+     */
+    findProjectDir() {
+        if (process.env.WALLPAPERMAISON_DIR && fs.existsSync(process.env.WALLPAPERMAISON_DIR)) {
+            return process.env.WALLPAPERMAISON_DIR;
+        }
+        const home = this.home;
+        const candidates = [
+            path.join(home, 'Wallpaper'),
+            path.join(home, 'Bureau/Wallpaper'),
+            path.join(home, 'Desktop/Wallpaper'),
+            path.join(home, 'reseau/Perso/Bureau/Wallpaper'),
+            path.join(home, 'reseau/Perso/Wallpaper'),
+            path.join('/var/home', process.env.USER || '', 'Wallpaper'),
+            path.join('/var/home', process.env.USER || '', 'Bureau/Wallpaper'),
+            path.join('/var/home', process.env.USER || '', 'reseau/Perso/Bureau/Wallpaper')
+        ];
+        for (const c of candidates) {
+            if (c && fs.existsSync(path.join(c, 'scripts/patch_vscode_html.py'))) {
+                return c;
+            }
+        }
+        return '';
+    }
+
+    /**
      * Détecte le dossier par défaut contenant des fonds d'écran
      */
     detectDefaultFolder() {
-        const home = process.env.HOME || '/var/home/' + (process.env.USER || 'E256190S');
-        const candidates = [
+        const home = this.home;
+        const candidates = [];
+        const proj = this.findProjectDir();
+        if (proj) {
+            candidates.push(path.join(proj, 'Wallpaper'));
+        }
+        candidates.push(
+            path.join(home, 'Wallpaper'),
+            path.join(home, 'Pictures/Wallpapers'),
+            path.join(home, 'Pictures'),
             path.join(home, 'reseau/Perso/Téléchargements'),
             path.join(home, 'reseau/Perso/Images/Wallpapers'),
             path.join(home, 'Téléchargements'),
-            path.join(home, 'Downloads'),
-            path.join(home, 'Pictures/Wallpapers'),
-            path.join(home, 'Pictures')
-        ];
+            path.join(home, 'Downloads')
+        );
         for (const c of candidates) {
             try {
-                if (fs.existsSync(c)) {
+                if (c && fs.existsSync(c)) {
                     const files = this.getWallpapers(c);
                     if (files.length > 0) return c;
                 }
             } catch (e) {}
         }
-        return candidates[0];
+        return candidates[0] || '';
     }
 
     /**
@@ -67,11 +99,18 @@ class RotationManager {
      * Chemins vers les fichiers .env candidats
      */
     getEnvPaths() {
-        return [
-            path.join(this.home, 'reseau/Perso/Bureau/Wallpaper/.env'),
+        const paths = [];
+        const proj = this.findProjectDir();
+        if (proj) {
+            paths.push(path.join(proj, '.env'));
+        }
+        paths.push(
+            path.join(this.home, 'Wallpaper/.env'),
             path.join(this.home, 'Bureau/Wallpaper/.env'),
-            path.join(this.home, 'Wallpaper/.env')
-        ];
+            path.join(this.home, 'Desktop/Wallpaper/.env'),
+            path.join(this.home, 'reseau/Perso/Bureau/Wallpaper/.env')
+        );
+        return paths;
     }
 
     /**
@@ -117,8 +156,14 @@ class RotationManager {
                         const m = parseInt(parsed.ROTATION_INTERVAL_MINUTES, 10);
                         if (!isNaN(m) && m >= 1) this.settings.intervalMinutes = m;
                     }
-                    if (parsed.ROTATION_FOLDER && fs.existsSync(parsed.ROTATION_FOLDER)) {
-                        this.settings.folder = parsed.ROTATION_FOLDER;
+                    if (parsed.ROTATION_FOLDER) {
+                        let rf = parsed.ROTATION_FOLDER.trim();
+                        if (!path.isAbsolute(rf)) {
+                            rf = path.resolve(path.dirname(ep), rf);
+                        }
+                        if (fs.existsSync(rf)) {
+                            this.settings.folder = rf;
+                        }
                     }
                     if (parsed.ROTATION_ORDER) {
                         const ord = parsed.ROTATION_ORDER.toLowerCase().trim();

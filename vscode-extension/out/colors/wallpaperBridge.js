@@ -94,6 +94,29 @@ print(row[0] if row else "")
             }
         }
 
+        // 3. Fallback sur le dossier Wallpaper du projet
+        const homeDir = this.getHomeDir();
+        const repoCandidates = [
+            process.env.WALLPAPERMAISON_DIR,
+            node_path.join(homeDir, 'Wallpaper'),
+            node_path.join(homeDir, 'Bureau/Wallpaper'),
+            node_path.join(homeDir, 'Desktop/Wallpaper'),
+            node_path.join(homeDir, 'reseau/Perso/Bureau/Wallpaper')
+        ];
+        for (const rc of repoCandidates) {
+            if (rc) {
+                const wpDir = node_path.join(rc, 'Wallpaper');
+                if (node_fs.existsSync(wpDir)) {
+                    try {
+                        const files = node_fs.readdirSync(wpDir).filter(f => ['.mp4', '.webm'].some(ext => f.toLowerCase().endsWith(ext)));
+                        if (files.length > 0) {
+                            return node_path.join(wpDir, files[0]);
+                        }
+                    } catch {}
+                }
+            }
+        }
+
         return null;
     }
 

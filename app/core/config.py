@@ -84,6 +84,9 @@ PERFORMANCE_PROFILES: Dict[str, Dict[str, Any]] = {
 
 def _get_default_library_folders() -> list:
     folders = []
+    project_wallpaper = REPO_ROOT / "Wallpaper"
+    if project_wallpaper.exists():
+        folders.append(str(project_wallpaper))
     if PERSISTENT_ROOT and PERSISTENT_ROOT.exists():
         p_wallpapers = PERSISTENT_ROOT / "Images" / "Wallpapers"
         p_test = PERSISTENT_ROOT / "Téléchargements" / "test"
@@ -92,6 +95,7 @@ def _get_default_library_folders() -> list:
             folders.append(str(p_test))
     folders.append(str(HOME / "Pictures" / "Wallpapers"))
     folders.append(str(HOME / "Pictures"))
+    folders.append(str(HOME / "Wallpaper"))
     seen = set()
     result = []
     for f in folders:

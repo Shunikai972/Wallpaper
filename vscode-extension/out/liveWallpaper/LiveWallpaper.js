@@ -205,7 +205,7 @@ class LiveWallpaper {
         }
         const fs = await import('node:fs');
         const path = await import('node:path');
-        const home = process.env.HOME || '/var/home/' + (process.env.USER || 'E256190S');
+        const home = process.env.HOME || (process.env.USER ? (fs.existsSync('/var/home/' + process.env.USER) ? '/var/home/' + process.env.USER : '/home/' + process.env.USER) : '');
 
         // 1. Mise à jour automatique de current_wallpaper.json
         try {
@@ -224,8 +224,21 @@ class LiveWallpaper {
 
         // 2. Déclencher patch_vscode_html.py
         try {
-            const patchScript = path.join(home, 'reseau/Perso/Bureau/Wallpaper/scripts/patch_vscode_html.py');
-            if (fs.existsSync(patchScript)) {
+            const patchCandidates = [
+                process.env.WALLPAPERMAISON_DIR ? path.join(process.env.WALLPAPERMAISON_DIR, 'scripts/patch_vscode_html.py') : '',
+                path.join(home, 'Wallpaper/scripts/patch_vscode_html.py'),
+                path.join(home, 'Bureau/Wallpaper/scripts/patch_vscode_html.py'),
+                path.join(home, 'Desktop/Wallpaper/scripts/patch_vscode_html.py'),
+                path.join(home, 'reseau/Perso/Bureau/Wallpaper/scripts/patch_vscode_html.py')
+            ];
+            let patchScript = '';
+            for (const pc of patchCandidates) {
+                if (pc && fs.existsSync(pc)) {
+                    patchScript = pc;
+                    break;
+                }
+            }
+            if (patchScript) {
                 await new Promise((resolve, reject) => {
                     const child = require('child_process').spawn('python3', [patchScript, config.videoPath], { stdio: 'ignore' });
                     const timeout = setTimeout(() => {

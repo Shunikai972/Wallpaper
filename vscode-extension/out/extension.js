@@ -141,12 +141,37 @@ async function activate(context) {
         }
     }));
     // ── Shared State & Multi-Desktop Synchronization Helpers ──
-    const home = process.env.HOME || '/var/home/' + (process.env.USER || 'E256190S');
+    const home = process.env.HOME || (process.env.USER ? (fs.existsSync('/var/home/' + process.env.USER) ? '/var/home/' + process.env.USER : '/home/' + process.env.USER) : '');
+    const findProjectDir = () => {
+        if (process.env.WALLPAPERMAISON_DIR && fs.existsSync(process.env.WALLPAPERMAISON_DIR)) {
+            return process.env.WALLPAPERMAISON_DIR;
+        }
+        const candidates = [
+            path.join(home, 'Wallpaper'),
+            path.join(home, 'Bureau/Wallpaper'),
+            path.join(home, 'Desktop/Wallpaper'),
+            path.join(home, 'reseau/Perso/Bureau/Wallpaper'),
+            path.join(home, 'reseau/Perso/Wallpaper'),
+            path.join('/var/home', process.env.USER || '', 'Wallpaper'),
+            path.join('/var/home', process.env.USER || '', 'Bureau/Wallpaper'),
+            path.join('/var/home', process.env.USER || '', 'reseau/Perso/Bureau/Wallpaper')
+        ];
+        for (const c of candidates) {
+            if (c && fs.existsSync(path.join(c, 'scripts/patch_vscode_html.py'))) {
+                return c;
+            }
+        }
+        return '';
+    };
     const stateFile = path.join(home, '.config/wallpapermaison/current_wallpaper.json');
 
     const stageMediaForWorkbench = (filePath) => new Promise((resolve) => {
-        const projectDir = process.env.WALLPAPERMAISON_DIR || path.join(home, 'reseau/Perso/Bureau/Wallpaper');
-        const stageScript = path.join(projectDir, 'app/automation/vscode_media.py');
+        const projectDir = findProjectDir();
+        const stageScript = projectDir ? path.join(projectDir, 'app/automation/vscode_media.py') : '';
+        if (!stageScript || !fs.existsSync(stageScript)) {
+            resolve(filePath);
+            return;
+        }
         const childProcess = require('child_process');
         childProcess.execFile('python3', [stageScript, filePath, context.extensionPath, '--url'], { timeout: 180000 }, (error, stdout, stderr) => {
             const stagedPath = (stdout || '').trim();
@@ -248,11 +273,11 @@ async function activate(context) {
             await wallpaper.updateConfig({ videoPath: playablePath, enabled: true });
 
             // 4. Mise à jour synchrone du patch workbench.html
-            const projectDir = process.env.WALLPAPERMAISON_DIR || path.join(home, 'reseau/Perso/Bureau/Wallpaper');
-            const patchScript = path.join(projectDir, 'scripts/patch_vscode_html.py');
-            if (fs.existsSync(patchScript)) {
+            const projectDir = findProjectDir();
+            const patchScript = projectDir ? path.join(projectDir, 'scripts/patch_vscode_html.py') : '';
+            if (patchScript && fs.existsSync(patchScript)) {
                 try {
-                    require('child_process').spawnSync('python3', [patchScript, playablePath], { timeout: 3000 });
+                    require('child_process').spawnSync('python3', [patchScript, playablePath], { timeout: 30000 });
                 } catch (e) {}
             }
 
@@ -421,7 +446,7 @@ async function activate(context) {
 
     // Surveillance continue pour synchroniser automatiquement VS Code si le Bureau change
     try {
-        const homeDir = process.env.HOME || '/var/home/' + (process.env.USER || 'E256190S');
+        const homeDir = home;
         const stateFilePath = path.join(homeDir, '.config/wallpapermaison/current_wallpaper.json');
         let lastSeenTimestamp = 0;
         const syncInterval = setInterval(() => {
@@ -440,6 +465,20 @@ async function activate(context) {
                     const { WallpaperBridge } = require('./colors/wallpaperBridge');
                     currentDetected = WallpaperBridge.detectCurrentWallpaper();
                 }
+                if (!currentDetected) {
+                    const proj = findProjectDir();
+                    if (proj) {
+                        const wpDir = path.join(proj, 'Wallpaper');
+                        if (fs.existsSync(wpDir)) {
+                            try {
+                                const files = fs.readdirSync(wpDir).filter(f => ['.mp4', '.webm'].some(ext => f.toLowerCase().endsWith(ext)));
+                                if (files.length > 0) {
+                                    currentDetected = path.join(wpDir, files[0]);
+                                }
+                            } catch (e) {}
+                        }
+                    }
+                }
                 if (currentDetected && fs.existsSync(currentDetected)) {
                     const curCfg = wallpaper.getRawConfig();
                     const samePath = (a, b) => {
@@ -451,11 +490,11 @@ async function activate(context) {
                     };
                     if (!samePath(curCfg.videoPath, currentDetected)) {
                         wallpaper.updateConfig({ videoPath: currentDetected, enabled: true }).catch(() => {});
-                        const projectDir = process.env.WALLPAPERMAISON_DIR || path.join(homeDir, 'reseau/Perso/Bureau/Wallpaper');
-                        const patchScript = path.join(projectDir, 'scripts/patch_vscode_html.py');
-                        if (fs.existsSync(patchScript)) {
+                        const projectDir = findProjectDir();
+                        const patchScript = projectDir ? path.join(projectDir, 'scripts/patch_vscode_html.py') : '';
+                        if (patchScript && fs.existsSync(patchScript)) {
                             try {
-                                require('child_process').spawnSync('python3', [patchScript, currentDetected], { timeout: 3000 });
+                                require('child_process').spawnSync('python3', [patchScript, currentDetected], { timeout: 30000 });
                             } catch (e) {}
                         }
                         if (wallpaper.colorEngine) {
@@ -477,17 +516,16 @@ async function activate(context) {
 
     // ── Sudo Root Terminal Integration ──
     function getRootShell() {
-        const home = process.env.HOME || '/var/home/' + (process.env.USER || 'E256190S');
-        const user = process.env.USER || 'E256190S';
+        const user = process.env.USER || '';
         const candidates = [
             path.join(home, '.local/bin/root-shell'),
             path.join(home, 'reseau/Perso/.local/bin/root-shell'),
-            `/var/home/${user}/.local/bin/root-shell`,
-            '/var/home/E256190S/.local/bin/root-shell',
+            user ? `/var/home/${user}/.local/bin/root-shell` : '',
+            user ? `/home/${user}/.local/bin/root-shell` : '',
             'root-shell'
         ];
         for (const c of candidates) {
-            if (c === 'root-shell' || fs.existsSync(c)) {
+            if (c && (c === 'root-shell' || fs.existsSync(c))) {
                 return c;
             }
         }
@@ -531,7 +569,6 @@ async function activate(context) {
                 webviewView.webview.options = { enableScripts: true };
 
                 const getCurrentPath = () => {
-                    const home = process.env.HOME || '/var/home/' + (process.env.USER || 'E256190S');
                     const sf = path.join(home, '.config/wallpapermaison/current_wallpaper.json');
                     try {
                         if (fs.existsSync(sf)) {
@@ -560,9 +597,14 @@ async function activate(context) {
                 const getHtml = (currentPath, rotState) => {
                     const isVid = ['.mp4', '.webm', '.mkv', '.mov'].some(ext => currentPath.toLowerCase().endsWith(ext));
                     const base = path.basename(currentPath) || 'Aucun fond sélectionné';
-                    const home = process.env.HOME || '/var/home/' + (process.env.USER || 'E256190S');
-                    const pDownloads = path.join(home, 'reseau/Perso/Téléchargements');
-                    const pWallpapers = path.join(home, 'reseau/Perso/Images/Wallpapers');
+                    const proj = findProjectDir();
+                    const pProjectWallpapers = proj ? path.join(proj, 'Wallpaper') : '';
+                    const pDownloads = fs.existsSync(path.join(home, 'reseau/Perso/Téléchargements'))
+                        ? path.join(home, 'reseau/Perso/Téléchargements')
+                        : path.join(home, 'Downloads');
+                    const pWallpapers = fs.existsSync(path.join(home, 'reseau/Perso/Images/Wallpapers'))
+                        ? path.join(home, 'reseau/Perso/Images/Wallpapers')
+                        : path.join(home, 'Pictures/Wallpapers');
 
                     return `<!DOCTYPE html>
 <html lang="fr">
@@ -968,6 +1010,7 @@ async function activate(context) {
         </div>
 
         <div class="chips-group">
+            ${pProjectWallpapers ? `<button class="preset-btn" id="btnPresetProject" title="${pProjectWallpapers}">🌌 Wallpapers Dépôt</button>` : ''}
             <button class="preset-btn" id="btnPresetDownloads" title="${pDownloads}">🎬 Téléchargements</button>
             <button class="preset-btn" id="btnPresetWallpapers" title="${pWallpapers}">🖼️ Images HD</button>
             <span class="chip">🎬 <span id="videoCount">${rotState.videoCount}</span> vid</span>
@@ -1115,6 +1158,13 @@ async function activate(context) {
         document.getElementById('btnBrowseFolder').onclick = () => {
             vscode.postMessage({ command: 'chooseFolder' });
         };
+        const btnProject = document.getElementById('btnPresetProject');
+        if (btnProject) {
+            btnProject.onclick = () => {
+                vscode.postMessage({ command: 'setFolder', folder: '${pProjectWallpapers}' });
+                showSaved();
+            };
+        }
         document.getElementById('btnPresetDownloads').onclick = () => {
             vscode.postMessage({ command: 'setFolder', folder: '${pDownloads}' });
             showSaved();

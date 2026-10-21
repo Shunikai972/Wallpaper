@@ -16,8 +16,19 @@ static const char *get_redirect_path(void) {
     static char path[512] = {0};
     if (path[0] == '\0') {
         const char *home = getenv("HOME");
-        if (!home) home = "/var/home/E256190S";
-        snprintf(path, sizeof(path), "%s/reseau/Perso/.config/wallpapermaison/vscode/workbench.html", home);
+        if (!home) {
+            const char *user = getenv("USER");
+            static char fallback_home[128];
+            snprintf(fallback_home, sizeof(fallback_home), "/home/%s", user ? user : "user");
+            home = fallback_home;
+        }
+        char cand[512];
+        snprintf(cand, sizeof(cand), "%s/reseau/Perso/.config/wallpapermaison/vscode/workbench.html", home);
+        if (access(cand, R_OK) == 0) {
+            strncpy(path, cand, sizeof(path) - 1);
+        } else {
+            snprintf(path, sizeof(path), "%s/.config/wallpapermaison/vscode/workbench.html", home);
+        }
     }
     return path;
 }

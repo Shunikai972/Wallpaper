@@ -18,9 +18,12 @@ fi
 
 if [ -z "$SCRIPT_DIR" ] || [ ! -f "$SCRIPT_DIR/scripts/run.sh" ]; then
     for candidate in \
-        "${HOME}/reseau/Perso/Bureau/Wallpaper" \
-        "${HOME}/Bureau/Wallpaper" \
         "${HOME}/Wallpaper" \
+        "${HOME}/Bureau/Wallpaper" \
+        "${HOME}/Desktop/Wallpaper" \
+        "${HOME}/reseau/Perso/Bureau/Wallpaper" \
+        "/var/home/${USER}/Wallpaper" \
+        "/home/${USER}/Wallpaper" \
         "/var/home/${USER}/reseau/Perso/Bureau/Wallpaper"; do
         if [ -f "$candidate/scripts/run.sh" ]; then
             SCRIPT_DIR="$candidate"
@@ -386,8 +389,10 @@ if [ -d "$EXT_SRC" ]; then
         chmod +x "${HOME}/.local/bin/root-shell"
         if [ "$IS_PERSISTENT" = true ]; then
             mkdir -p "${PERSISTENT_NFS}/.local/bin"
-            cp -f "${SCRIPT_DIR}/scripts/root-shell" "${PERSISTENT_NFS}/.local/bin/root-shell"
-            chmod +x "${PERSISTENT_NFS}/.local/bin/root-shell"
+            if [ "$(realpath -m "${HOME}/.local/bin/root-shell")" != "$(realpath -m "${PERSISTENT_NFS}/.local/bin/root-shell")" ]; then
+                cp -f "${SCRIPT_DIR}/scripts/root-shell" "${PERSISTENT_NFS}/.local/bin/root-shell" 2>/dev/null || true
+            fi
+            chmod +x "${PERSISTENT_NFS}/.local/bin/root-shell" 2>/dev/null || true
         fi
         echo "✓ Script root-shell déployé dans ~/.local/bin/root-shell"
     fi
@@ -414,8 +419,10 @@ EOF_GJS
 chmod +x "${HOME}/.local/bin/gjs"
 if [ "$IS_PERSISTENT" = true ]; then
     mkdir -p "${PERSISTENT_NFS}/.local/bin"
-    cp -f "${HOME}/.local/bin/gjs" "${PERSISTENT_NFS}/.local/bin/gjs"
-    chmod +x "${PERSISTENT_NFS}/.local/bin/gjs"
+    if [ "$(realpath -m "${HOME}/.local/bin/gjs")" != "$(realpath -m "${PERSISTENT_NFS}/.local/bin/gjs")" ]; then
+        cp -f "${HOME}/.local/bin/gjs" "${PERSISTENT_NFS}/.local/bin/gjs" 2>/dev/null || true
+    fi
+    chmod +x "${PERSISTENT_NFS}/.local/bin/gjs" 2>/dev/null || true
 fi
 
 # Déploiement des codecs vidéo Cisco OpenH264
@@ -510,6 +517,57 @@ else
     echo "ℹ️  Extension Hanabi non présente dans ${SCRIPT_DIR}/gnome-extension."
 fi
 
+# Détection du premier wallpaper vidéo pour l'initialisation de session et VS Code
+FIRST_WALLPAPER=""
+if [ -d "${SCRIPT_DIR}/Wallpaper" ]; then
+    for v in "${SCRIPT_DIR}/Wallpaper"/*.mp4 "${SCRIPT_DIR}/Wallpaper"/*.webm; do
+        if [ -f "$v" ]; then
+            FIRST_WALLPAPER="$(readlink -f "$v")"
+            break
+        fi
+    done
+fi
+
+if [ -n "$FIRST_WALLPAPER" ]; then
+    # Configurer le fond d'écran initial dans Hanabi GSettings si non renseigné
+    if command -v gsettings &>/dev/null; then
+        CURRENT_VIDEO_SETTING=$(gsettings get io.github.jeffshee.hanabi-extension video-path 2>/dev/null || echo "''")
+        CURRENT_VIDEO_CLEAN=$(echo "$CURRENT_VIDEO_SETTING" | tr -d "'\"")
+        if [ -z "$CURRENT_VIDEO_CLEAN" ] || [ ! -f "$CURRENT_VIDEO_CLEAN" ]; then
+            gsettings set io.github.jeffshee.hanabi-extension video-path "$FIRST_WALLPAPER" 2>/dev/null || true
+            echo "✓ Fond d'écran initial configuré dans GNOME Hanabi : $(basename "$FIRST_WALLPAPER")"
+        fi
+    fi
+
+    # Initialiser current_wallpaper.json
+    mkdir -p "${HOME}/.config/wallpapermaison"
+    if [ ! -f "${HOME}/.config/wallpapermaison/current_wallpaper.json" ]; then
+        cat << EOF_INIT_JSON > "${HOME}/.config/wallpapermaison/current_wallpaper.json"
+{
+  "path": "${FIRST_WALLPAPER}",
+  "media_type": "video",
+  "source": "setup",
+  "timestamp": $(date +%s)
+}
+EOF_INIT_JSON
+    fi
+    if [ "$IS_PERSISTENT" = true ]; then
+        mkdir -p "${PERSISTENT_NFS}/.config/wallpapermaison"
+        [ ! -f "${PERSISTENT_NFS}/.config/wallpapermaison/current_wallpaper.json" ] && cp "${HOME}/.config/wallpapermaison/current_wallpaper.json" "${PERSISTENT_NFS}/.config/wallpapermaison/current_wallpaper.json" 2>/dev/null || true
+    fi
+
+    # Initialiser .env si absent ou corriger ROTATION_FOLDER
+    if [ ! -f "${SCRIPT_DIR}/.env" ] && [ -f "${SCRIPT_DIR}/.env.example" ]; then
+        cp "${SCRIPT_DIR}/.env.example" "${SCRIPT_DIR}/.env"
+    fi
+    if [ -f "${SCRIPT_DIR}/.env" ]; then
+        CUR_RF=$(grep -E '^ROTATION_FOLDER=' "${SCRIPT_DIR}/.env" 2>/dev/null | cut -d= -f2- | tr -d '"'\'' ' || true)
+        if [ -z "$CUR_RF" ] || [ ! -d "$CUR_RF" ]; then
+            sed -i 's|^ROTATION_FOLDER=.*|ROTATION_FOLDER="Wallpaper"|' "${SCRIPT_DIR}/.env" 2>/dev/null || true
+        fi
+    fi
+fi
+
 # ------------------------------------------------------------------------------
 # 11. Intégration et injection native directe dans Visual Studio Code
 # ------------------------------------------------------------------------------
@@ -532,9 +590,11 @@ if [ -d "/usr/apps/VSCode-linux-x64" ]; then
         cp /usr/apps/VSCode-linux-x64/resources/app/out/vs/code/electron-browser/workbench/workbench.html "${WB_TARGET}" 2>/dev/null || true
         chmod 664 "${WB_TARGET}" 2>/dev/null || true
     fi
-    if [ -f "${SCRIPT_DIR}/scripts/patch_vscode_html.py" ]; then
-        python3 "${SCRIPT_DIR}/scripts/patch_vscode_html.py" 2>/dev/null || true
-    fi
+fi
+
+# Patcher le workbench pour toute installation de VS Code détectée
+if [ -f "${SCRIPT_DIR}/scripts/patch_vscode_html.py" ]; then
+    python3 "${SCRIPT_DIR}/scripts/patch_vscode_html.py" 2>/dev/null || true
 fi
 
 if [ "$IS_PERSISTENT" = true ]; then
@@ -549,12 +609,16 @@ if [ -f "${SCRIPT_DIR}/scripts/code-launcher.sh" ]; then
     cp -f "${SCRIPT_DIR}/scripts/code-launcher.sh" "${HOME}/.local/bin/code"
     chmod +x "${HOME}/.local/bin/code"
     if [ "$IS_PERSISTENT" = true ]; then
-        cp -f "${SCRIPT_DIR}/scripts/code-launcher.sh" "${PERSISTENT_NFS}/.local/bin/code"
-        chmod +x "${PERSISTENT_NFS}/.local/bin/code"
+        mkdir -p "${PERSISTENT_NFS}/.local/bin"
+        if [ "$(realpath -m "${HOME}/.local/bin/code")" != "$(realpath -m "${PERSISTENT_NFS}/.local/bin/code")" ]; then
+            cp -f "${SCRIPT_DIR}/scripts/code-launcher.sh" "${PERSISTENT_NFS}/.local/bin/code" 2>/dev/null || true
+        fi
+        chmod +x "${PERSISTENT_NFS}/.local/bin/code" 2>/dev/null || true
     fi
 fi
 
-cat << 'EOF' > "${HOME}/.local/share/applications/vscode.desktop"
+for desk_name in vscode.desktop code.desktop; do
+    cat << 'EOF' > "${HOME}/.local/share/applications/${desk_name}"
 [Desktop Entry]
 Name=Visual Studio Code
 Comment=Code Editing. Redefined.
@@ -568,12 +632,10 @@ Categories=TextEditor;Development;IDE;
 MimeType=text/plain;inode/directory;application/x-code-workspace;
 Keywords=vscode;
 EOF
-
-if [ "$IS_PERSISTENT" = true ] && [ -d "${PERSISTENT_NFS}/.local/share/applications" ]; then
-    if [ "$(realpath "${HOME}/.local/share/applications/vscode.desktop")" != "$(realpath "${PERSISTENT_NFS}/.local/share/applications/vscode.desktop" 2>/dev/null)" ]; then
-        cp -f "${HOME}/.local/share/applications/vscode.desktop" "${PERSISTENT_NFS}/.local/share/applications/vscode.desktop" 2>/dev/null || true
+    if [ "$IS_PERSISTENT" = true ] && [ -d "${PERSISTENT_NFS}/.local/share/applications" ]; then
+        cp -f "${HOME}/.local/share/applications/${desk_name}" "${PERSISTENT_NFS}/.local/share/applications/${desk_name}" 2>/dev/null || true
     fi
-fi
+done
 echo "✓ Visual Studio Code configuré avec lanceur portable, injection native et Terminal Sudo Root"
 
 # ------------------------------------------------------------------------------

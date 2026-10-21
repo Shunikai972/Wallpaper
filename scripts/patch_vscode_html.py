@@ -100,14 +100,33 @@ def detect_current_video_path(preferred_path: str = None) -> str:
         if sl.exists():
             return str(sl.resolve())
 
-    # 4. Premier MP4 disponible
-    for dl_dir in [Path.home() / "reseau/Perso/Téléchargements", Path.home() / "Téléchargements"]:
+    # 4. Dossier Wallpaper du projet
+    repo_wp = Path(__file__).resolve().parents[1] / "Wallpaper"
+    if repo_wp.exists():
+        repo_sl = repo_wp / "wallpaper.mp4"
+        if repo_sl.exists():
+            return str(repo_sl.resolve())
+        repo_vids = sorted(list(repo_wp.glob("*.mp4")) + list(repo_wp.glob("*.webm")))
+        if repo_vids:
+            return str(repo_vids[0].resolve())
+
+    # 5. Premier MP4 disponible dans les répertoires standards
+    for dl_dir in [
+        Path.home() / "reseau/Perso/Téléchargements",
+        Path.home() / "Téléchargements",
+        Path.home() / "Downloads",
+        Path.home() / "Pictures/Wallpapers",
+        Path.home() / "Wallpaper"
+    ]:
         if dl_dir.exists():
-            mp4s = list(dl_dir.glob("*.mp4"))
+            mp4s = list(dl_dir.glob("*.mp4")) + list(dl_dir.glob("*.webm"))
             if mp4s:
                 return str(mp4s[0].resolve())
 
-    return str(Path.home() / "reseau/Perso/Téléchargements/wallpaper.mp4")
+    default_target = repo_wp / "wallpaper.mp4"
+    if default_target.exists():
+        return str(default_target.resolve())
+    return str(Path.home() / "Téléchargements/wallpaper.mp4")
 
 def find_workbench_html() -> Path:
     """Trouve le HTML de démarrage de l'installation VS Code installée."""
@@ -299,21 +318,26 @@ def patch_workbench(video_path: str = None) -> bool:
     content = orig_path.read_text(encoding="utf-8")
 
     # 1. Mise à jour CSP pour autoriser les médias locaux, scripts d'extension et connexions locales
+    local_origins = ["http://127.0.0.1:*", "http://localhost:*", "http:"]
+    if local_media_origin and local_media_origin not in local_origins:
+        local_origins.append(local_media_origin)
     content, _ = _add_csp_sources(content, "script-src", ["'unsafe-inline'", "vscode-file:"])
     content, _ = _add_csp_sources(content, "media-src", [
-        "'self'", "vscode-file:", "vscode-remote-resource:", local_media_origin,
-        "https:", "blob:", "data:",
+        "'self'", "vscode-file:", "vscode-remote-resource:",
+        "https:", "blob:", "data:", *local_origins,
     ])
     content, _ = _add_csp_sources(content, "img-src", [
-        "'self'", "vscode-file:", "vscode-remote-resource:", "https:", "blob:", "data:",
+        "'self'", "vscode-file:", "vscode-remote-resource:",
+        "https:", "blob:", "data:", *local_origins,
     ])
     content, has_connect_src = _add_csp_sources(content, "connect-src", [
-        "'self'", "vscode-file:", "vscode-remote-resource:", "https:", "ws:",
+        "'self'", "vscode-file:", "vscode-remote-resource:", "https:", "http:", "ws:", "wss:",
+        "http://127.0.0.1:*", "http://localhost:*", "ws://127.0.0.1:*", "ws://localhost:*",
     ])
     if not has_connect_src:
         content = re.sub(
             r"default-src\s+'none'\s*;",
-            "default-src 'none';\\n\\t\\t\\t\\tconnect-src 'self' vscode-file: vscode-remote-resource: https: ws: http:;",
+            "default-src 'none';\\n\\t\\t\\t\\tconnect-src 'self' vscode-file: vscode-remote-resource: https: http: ws: wss: http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*;",
             content,
             count=1,
         )
@@ -902,9 +926,18 @@ def patch_workbench(video_path: str = None) -> bool:
     overlay_written = False
     for target_dir in overlay_dirs:
         try:
+            target_dir.mkdir(parents=True, exist_ok=True)
+            if orig_path.parent.is_dir():
+                for sibling in orig_path.parent.iterdir():
+                    if sibling.is_file() and sibling.name != "workbench.html":
+                        try:
+                            dest = target_dir / sibling.name
+                            if not dest.exists() or dest.stat().st_mtime < sibling.stat().st_mtime:
+                                shutil.copy2(sibling, dest)
+                        except Exception:
+                            pass
             atomic_write_text(target_dir / "workbench.html", content)
-            if workbench_js_content is not None:
-                atomic_write_text(target_dir / "workbench.js", workbench_js_content)
+            if workbench_js_content is not None or (target_dir / "workbench.js").exists():
                 overlay_written = True
         except Exception:
             pass

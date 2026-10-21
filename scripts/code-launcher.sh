@@ -6,9 +6,12 @@
 # 1. Localisation dynamique du projet WallpaperMaison
 WP_DIR=""
 for candidate in \
-    "$HOME/reseau/Perso/Bureau/Wallpaper" \
-    "$HOME/Bureau/Wallpaper" \
     "$HOME/Wallpaper" \
+    "$HOME/Bureau/Wallpaper" \
+    "$HOME/Desktop/Wallpaper" \
+    "$HOME/reseau/Perso/Bureau/Wallpaper" \
+    "/var/home/$USER/Wallpaper" \
+    "/var/home/$USER/Bureau/Wallpaper" \
     "/var/home/$USER/reseau/Perso/Bureau/Wallpaper"; do
     if [ -d "$candidate" ] && [ -f "$candidate/scripts/patch_vscode_html.py" ]; then
         WP_DIR="$candidate"
@@ -87,19 +90,34 @@ if [ -n "$WP_DIR" ] && [ -f "$WP_DIR/scripts/register_extension.py" ]; then
 fi
 
 # 4. Détection du binaire et du workbench de VS Code
-VSCODE_BIN="/usr/apps/VSCode-linux-x64/code"
-if [ ! -x "$VSCODE_BIN" ]; then
-    for candidate in /usr/bin/code /usr/share/code/bin/code /usr/share/code/code /usr/lib/code/code /usr/lib/code/bin/code; do
-        if [ -x "$candidate" ] && [ "$candidate" != "$HOME/.local/bin/code" ]; then
-            VSCODE_BIN="$candidate"
-            break
-        fi
-    done
-fi
+VSCODE_BIN=""
+for candidate in \
+    /usr/share/code/code \
+    /usr/lib/code/code \
+    /opt/visual-studio-code/code \
+    /usr/apps/VSCode-linux-x64/code \
+    /usr/bin/code \
+    /usr/share/code/bin/code \
+    /usr/lib/code/bin/code; do
+    if [ -x "$candidate" ] && [ "$candidate" != "$HOME/.local/bin/code" ]; then
+        VSCODE_BIN="$candidate"
+        break
+    fi
+done
 
 T_HTML=""
 if [ -x "$VSCODE_BIN" ]; then
     VSCODE_BIN="$(readlink -f "$VSCODE_BIN" 2>/dev/null || echo "$VSCODE_BIN")"
+    # Si le binaire résolu est un script wrapper shell (ex: bin/code), tenter de trouver le vrai binaire ELF
+    if [ -f "$VSCODE_BIN" ] && file -b "$VSCODE_BIN" 2>/dev/null | grep -qi "script"; then
+        for real_elf in "$(dirname "$VSCODE_BIN")/../code" "$(dirname "$VSCODE_BIN")/code"; do
+            if [ -x "$real_elf" ] && file -b "$real_elf" 2>/dev/null | grep -qi "ELF"; then
+                VSCODE_BIN="$(readlink -f "$real_elf")"
+                break
+            fi
+        done
+    fi
+
     search_dir="$(dirname "$VSCODE_BIN")"
     while [ -n "$search_dir" ] && [ "$search_dir" != "/" ]; do
         for layout in electron-browser electron-sandbox; do
@@ -136,17 +154,36 @@ P_HTML="$HOME/reseau/Perso/.config/wallpapermaison/vscode/workbench.html"
 for arg in "$@"; do
     case "$arg" in
         --version|-v|--list-extensions|--install-extension|--uninstall-extension|--status|--help|-h)
-            if [ -x "/usr/apps/VSCode-linux-x64/bin/code" ]; then
-                exec /usr/apps/VSCode-linux-x64/bin/code --extensions-dir /var/tmp/visual_extensions "$@"
-            elif [ -f "/usr/apps/VSCode-linux-x64/resources/app/out/cli.js" ]; then
-                exec env ELECTRON_RUN_AS_NODE=1 "$VSCODE_BIN" /usr/apps/VSCode-linux-x64/resources/app/out/cli.js --extensions-dir /var/tmp/visual_extensions "$@"
+            VSCODE_DIR="$(dirname "$VSCODE_BIN")"
+            CLI_JS=""
+            for cli_candidate in \
+                "$VSCODE_DIR/resources/app/out/cli.js" \
+                "$VSCODE_DIR/../resources/app/out/cli.js" \
+                "/usr/share/code/resources/app/out/cli.js" \
+                "/usr/apps/VSCode-linux-x64/resources/app/out/cli.js"; do
+                if [ -f "$cli_candidate" ]; then
+                    CLI_JS="$cli_candidate"
+                    break
+                fi
+            done
+            if [ -n "$CLI_JS" ]; then
+                exec env ELECTRON_RUN_AS_NODE=1 "$VSCODE_BIN" "$CLI_JS" --extensions-dir /var/tmp/visual_extensions "$@"
+            elif [ -x "$VSCODE_DIR/bin/code" ]; then
+                exec "$VSCODE_DIR/bin/code" --extensions-dir /var/tmp/visual_extensions "$@"
+            else
+                exec "$VSCODE_BIN" --extensions-dir /var/tmp/visual_extensions "$@"
             fi
             ;;
     esac
 done
 
 # 7. Lancement GUI avec bwrap pour injecter le fond d'écran et l'action sudo
-if command -v bwrap >/dev/null 2>&1 && [ -f "$T_HTML" ] && [ -x "$VSCODE_BIN" ] && [ "$PATCH_OK" -eq 1 ]; then
+USE_BWRAP=0
+if command -v bwrap >/dev/null 2>&1 && bwrap --dev-bind / / true >/dev/null 2>&1; then
+    USE_BWRAP=1
+fi
+
+if [ "$USE_BWRAP" -eq 1 ] && [ -f "$T_HTML" ] && [ -x "$VSCODE_BIN" ] && [ "$PATCH_OK" -eq 1 ]; then
     BWRAP_ARGS=(--dev-bind / /)
     if [ -f "$P_HTML_DIR/workbench.html" ] && [ -f "$P_HTML_DIR/workbench.js" ]; then
         BWRAP_ARGS+=(--ro-bind "$P_HTML_DIR" "$(dirname "$T_HTML")")
