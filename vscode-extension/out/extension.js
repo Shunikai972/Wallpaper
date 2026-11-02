@@ -206,7 +206,6 @@ async function activate(context) {
     }
 })();\n`;
         const dirs = [
-            '/var/tmp/visual_extensions/budicuy.live-wallpaper-99.0.0',
             path.join(home, '.vscode/extensions/budicuy.live-wallpaper-99.0.0'),
             path.join(home, 'reseau/Perso/.vscode/extensions/budicuy.live-wallpaper-99.0.0'),
             path.join(home, '.config/wallpapermaison'),

@@ -17,7 +17,7 @@ if [[ -z "${BASH_SOURCE[0]:-}" || "${BASH_SOURCE[0]}" == "bash" || \
     fi
 
     if [[ -d "$TARGET_DIR/.git" ]]; then
-        git -C "$TARGET_DIR" pull --quiet || true
+        git -C "$TARGET_DIR" pull --ff-only
     else
         mkdir -p "$(dirname "$TARGET_DIR")"
         git clone "$REPO_URL" "$TARGET_DIR"

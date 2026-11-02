@@ -24,13 +24,19 @@ read_manager_env() {
 }
 
 find_workspace() {
+    for config in "${HOME}/.config/wallpapermaison/project-path" "${HOME}/reseau/Perso/.config/wallpapermaison/project-path"; do
+        if [ -r "$config" ]; then
+            IFS= read -r candidate < "$config" || true
+            if [ -f "${candidate:-}/scripts/run.sh" ]; then printf '%s\n' "$candidate"; return 0; fi
+        fi
+    done
     for candidate in \
         "${HOME}/reseau/Perso/Bureau/Wallpaper" \
         "${HOME}/reseau/Perso/Wallpaper" \
         "${HOME}/Bureau/Wallpaper" \
         "${HOME}/Wallpaper" \
         "/var/home/${USER:-$(id -un)}/reseau/Perso/Bureau/Wallpaper"; do
-        if [ -x "${candidate}/scripts/run.sh" ]; then
+        if [ -f "${candidate}/scripts/run.sh" ]; then
             printf '%s\n' "$candidate"
             return 0
         fi
@@ -50,6 +56,13 @@ while :; do
 
     if [ -n "$workspace" ] && [ "$display_ready" = true ]; then
         log "Démarrage de WallpaperMaison dans la session ${XDG_SESSION_ID:-${WAYLAND_DISPLAY:-${DISPLAY}}}: $workspace"
+        # Recreate the local extension and launcher on machines with ephemeral homes.
+        ext_dir="${HOME}/.vscode/extensions/budicuy.live-wallpaper-99.0.0"
+        mkdir -p "$ext_dir" "${HOME}/.local/bin"
+        cp -r "${workspace}/vscode-extension/." "$ext_dir/" || log "Échec de la copie de l'extension VS Code."
+        python3 "${workspace}/scripts/register_extension.py" || log "Échec de l'enregistrement de l'extension."
+        install -m 755 "${workspace}/scripts/code-launcher.sh" "${HOME}/.local/bin/wallpapermaison-code"
+        python3 "${workspace}/scripts/write_desktop_entries.py" "$workspace"
         has_daemon=false
         for argument in "$@"; do
             [ "$argument" = "--daemon" ] && has_daemon=true

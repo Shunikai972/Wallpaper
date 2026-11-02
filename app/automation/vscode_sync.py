@@ -123,7 +123,6 @@ class VsCodeSync:
     }}
 }})();\n"""
             for target_dir in [
-                Path("/var/tmp/visual_extensions/budicuy.live-wallpaper-99.0.0"),
                 Path.home() / ".vscode/extensions/budicuy.live-wallpaper-99.0.0",
                 Path.home() / "reseau/Perso/.vscode/extensions/budicuy.live-wallpaper-99.0.0",
                 Path.home() / ".config/wallpapermaison",

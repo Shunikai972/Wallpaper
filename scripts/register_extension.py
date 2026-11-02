@@ -9,7 +9,6 @@ from pathlib import Path
 
 def register():
     targets = [
-        Path('/var/tmp/visual_extensions/extensions.json'),
         Path.home() / '.vscode/extensions/extensions.json',
         Path.home() / 'reseau/Perso/.vscode/extensions/extensions.json'
     ]

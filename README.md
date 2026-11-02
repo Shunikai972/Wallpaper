@@ -45,7 +45,21 @@
 
 ---
 
+## Diagnostic en cas de problème
+
+Dans un terminal ouvert pendant la session concernée, lancez :
+
+```bash
+bash /chemin/vers/Wallpaper/debug.sh
+```
+
+Le script affiche le chemin du fichier `WallpaperMaison-debug-…log` créé dans le dossier personnel. Reproduisez le problème avant de le lancer, idéalement avec VS Code (WallpaperMaison) ouvert. Le rapport contient les chemins de fichiers, la configuration de l’injection et des extraits des journaux de l’application ; vérifiez son contenu avant de le partager.
+
 ## 🚀 Installation
+
+> Pour utiliser le fond dans VS Code, ouvrez **Visual Studio Code (WallpaperMaison)** depuis le menu des applications. La commande système `code` reste disponible pour le lancement normal. L’injection nécessite une installation VS Code native détectable et `bubblewrap` (`bwrap`) utilisable par l’utilisateur ; si ce n’est pas le cas, VS Code démarre sans fond. Flatpak et les environnements qui bloquent les espaces de noms utilisateur ne sont pas pris en charge par cette injection. Après une mise à jour de VS Code, fermez toutes ses fenêtres puis relancez ce raccourci. Les fonds vidéo nécessitent aussi un lecteur et des codecs compatibles. L’installation configure la session de l’utilisateur courant ; sur un ordinateur où le répertoire personnel et XDG Autostart sont effacés à chaque connexion, il faut relancer l’installation ou prévoir un démarrage de session persistant par l’administrateur.
+
+
 
 ### ⚡ Installation en une seule ligne (Recommandé)
 Vous pouvez installer ou restaurer **WallpaperMaison** sur n'importe quelle machine (y compris un nouveau poste de travail à l'IUT) avec une seule commande à copier-coller :

@@ -811,11 +811,9 @@ def patch_workbench(video_path: str = None) -> bool:
     function startLiveSyncWatcher() {{
         var userHome = {repr(str(Path.home()))};
         var jsonUrls = [
-            'vscode-file://vscode-app/var/tmp/visual_extensions/budicuy.live-wallpaper-99.0.0/live_state.json',
             'vscode-file://vscode-app' + encodeURI(userHome) + '/.vscode/extensions/budicuy.live-wallpaper-99.0.0/live_state.json'
         ];
         var scriptUrls = [
-            'vscode-file://vscode-app/var/tmp/visual_extensions/budicuy.live-wallpaper-99.0.0/live_state.js',
             'vscode-file://vscode-app' + encodeURI(userHome) + '/.vscode/extensions/budicuy.live-wallpaper-99.0.0/live_state.js'
         ];
 

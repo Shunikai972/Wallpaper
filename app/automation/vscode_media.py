@@ -22,7 +22,7 @@ def _extension_root(configured_root: Optional[str] = None) -> Path:
         root = Path(configured).expanduser()
     else:
         candidates = (
-            Path("/var/tmp/visual_extensions/budicuy.live-wallpaper-99.0.0"),
+            Path.home() / ".vscode/extensions/budicuy.live-wallpaper-99.0.0",
             Path.home() / ".vscode/extensions/budicuy.live-wallpaper-99.0.0",
             Path.home() / "reseau/Perso/.vscode/extensions/budicuy.live-wallpaper-99.0.0",
         )

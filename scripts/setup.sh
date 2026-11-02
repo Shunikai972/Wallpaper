@@ -73,6 +73,12 @@ mkdir -p "${HOME}/.config/autostart"
 
 export PATH="${HOME}/.local/bin:${SCRIPT_DIR}/scripts:${PATH}"
 install -m 755 "${SCRIPT_DIR}/scripts/session-start.sh" "${HOME}/.local/bin/wallpapermaison-session-start"
+SESSION_LAUNCHER="${HOME}/.local/bin/wallpapermaison-session-start"
+if [ "$IS_PERSISTENT" = true ]; then
+    mkdir -p "${PERSISTENT_NFS}/.local/bin"
+    install -m 755 "${SCRIPT_DIR}/scripts/session-start.sh" "${PERSISTENT_NFS}/.local/bin/wallpapermaison-session-start"
+    SESSION_LAUNCHER="${PERSISTENT_NFS}/.local/bin/wallpapermaison-session-start"
+fi
 
 # ------------------------------------------------------------------------------
 # 4. Dépendances multimédia & Wrappers Flatpak (MPV & FFmpeg avec codecs complets)
@@ -167,8 +173,10 @@ fi
 
 if [ -f "${SCRIPT_DIR}/requirements.txt" ]; then
     echo "Vérification des dépendances pip..."
-    "${VENV_DIR}/bin/pip" install -r "${SCRIPT_DIR}/requirements.txt" --quiet --upgrade 2>/dev/null || \
-    "${VENV_DIR}/bin/pip" install -r "${SCRIPT_DIR}/requirements.txt" --quiet || true
+    if ! "${VENV_DIR}/bin/pip" install -r "${SCRIPT_DIR}/requirements.txt" --quiet; then
+        echo "❌ Installation des dépendances Python impossible. Vérifiez pip et la connexion réseau." >&2
+        exit 1
+    fi
     echo "✓ Dépendances Python installées."
 fi
 
@@ -233,13 +241,13 @@ echo ""
 echo "--- [4/6] Intégration GNOME Autostart & Systemd User ---"
 
 # 7.1 Raccourci d'application GNOME (.desktop)
-cat << 'EOF_DESK' > "${HOME}/.local/share/applications/wallpapermaison.desktop"
+cat << EOF_DESK > "${HOME}/.local/share/applications/wallpapermaison.desktop"
 [Desktop Entry]
 Type=Application
 Name=WallpaperMaison
 GenericName=Gestionnaire de Fonds d'Écran
 Comment=Alternative moderne à Wallpaper Engine pour Linux
-Exec=${SCRIPT_DIR}/scripts/run.sh %F
+Exec="${SCRIPT_DIR}/scripts/run.sh" %F
 Icon=wallpapermaison
 Terminal=false
 Categories=Utility;Settings;DesktopSettings;
@@ -250,12 +258,12 @@ EOF_DESK
 
 # 7.2 GNOME Autostart (.desktop)
 AUTOSTART_FILE="${HOME}/.config/autostart/wallpapermaison.desktop"
-cat << 'EOF_AUTO' > "${AUTOSTART_FILE}"
+cat << EOF_AUTO > "${AUTOSTART_FILE}"
 [Desktop Entry]
 Type=Application
 Name=WallpaperMaison Daemon
 Comment=Démarrage automatique et restauration de vos fonds d'écran
-Exec=${HOME}/.local/bin/wallpapermaison-session-start --daemon
+Exec="${SESSION_LAUNCHER}" --daemon
 Hidden=false
 NoDisplay=true
 X-GNOME-Autostart-enabled=true
@@ -284,70 +292,16 @@ if [ "$IS_PERSISTENT" = true ]; then
 fi
 echo "✓ Démarrage automatique configuré pour chaque session graphique (XDG Autostart)."
 
-# ------------------------------------------------------------------------------
-# 8. Réparation ~/.bashrc et script d'auto-guérison ~/.bashrc.d
-# ------------------------------------------------------------------------------
-echo ""
-echo "--- [5/6] Configuration de l'environnement Shell (~/.bashrc) ---"
-
-# Correction du bug /etc/apt sur Fedora dans ~/.bashrc si nécessaire
-if [ -f "${HOME}/.bashrc" ]; then
-    if grep -q "if \[\[ -e /etc/apt \]\];" "${HOME}/.bashrc"; then
-        echo "🔧 Correction de la condition Debian /etc/apt dans ~/.bashrc..."
-        sed -i '/if \[\[ -e \/etc\/apt \]\]; then/,/fi/ { /if \[\[ -e \/etc\/apt \]\]; then/d; /fi/d; }' "${HOME}/.bashrc" || true
-    fi
-
-    # Assurer le chargement de ~/.bashrc.d
-    if ! grep -q "bashrc.d" "${HOME}/.bashrc"; then
-        cat << 'EOF_BASHRC' >> "${HOME}/.bashrc"
-
-if [ -d ~/.bashrc.d ]; then
-  for rc in ~/.bashrc.d/*; do
-    [ -f "$rc" ] && . "$rc"
-  done
-fi
-EOF_BASHRC
-    fi
-fi
-
-mkdir -p "${HOME}/.bashrc.d"
-cat << 'EOF_BASHRC_D' > "${HOME}/.bashrc.d/wallpapermaison.sh"
-# ==============================================================================
-# WallpaperMaison - Auto-restauration et raccourcis shell
-# ==============================================================================
-for candidate in \
-    "$HOME/reseau/Perso/Bureau/Wallpaper" \
-    "$HOME/Bureau/Wallpaper" \
-    "$HOME/Wallpaper" \
-    "/var/home/$USER/reseau/Perso/Bureau/Wallpaper"; do
-    if [ -f "$candidate/scripts/run.sh" ]; then
-        WP_DIR="$candidate"
-        break
-    fi
+# Retire l'ancien alias qui empêchait code de démarrer après changement de machine.
+for old_shell in "${HOME}/.bashrc.d/wallpapermaison.sh" "${PERSISTENT_NFS}/.bashrc.d/wallpapermaison.sh"; do
+    if [ -f "$old_shell" ]; then sed -i '/alias code=/d' "$old_shell"; fi
 done
-
-if [ -n "${WP_DIR:-}" ] && [ -d "$WP_DIR" ]; then
-    export PATH="${HOME}/.local/bin:${WP_DIR}/scripts:$PATH"
-    alias wallpapermaison="${WP_DIR}/scripts/run.sh"
-    alias code="${HOME}/.local/bin/code"
-
-    # Auto-guérison de l'autostart au login si absent sur cette machine
-    if [ ! -f "${HOME}/.config/autostart/wallpapermaison.desktop" ]; then
-        mkdir -p "${HOME}/.config/autostart" 2>/dev/null
-        if [ -f "${WP_DIR}/scripts/autostart.desktop" ]; then
-            cp "${WP_DIR}/scripts/autostart.desktop" "${HOME}/.config/autostart/wallpapermaison.desktop" 2>/dev/null || true
-        fi
-    fi
-
+mkdir -p "${HOME}/.config/wallpapermaison"
+printf '%s\n' "$SCRIPT_DIR" > "${HOME}/.config/wallpapermaison/project-path"
+if [ "$IS_PERSISTENT" = true ]; then
+    mkdir -p "${PERSISTENT_NFS}/.config/wallpapermaison"
+    printf '%s\n' "$SCRIPT_DIR" > "${PERSISTENT_NFS}/.config/wallpapermaison/project-path"
 fi
-EOF_BASHRC_D
-
-if [ "$IS_PERSISTENT" = true ] && [ -d "${PERSISTENT_NFS}/.bashrc.d" ]; then
-    if [ "$(realpath "${HOME}/.bashrc.d")" != "$(realpath "${PERSISTENT_NFS}/.bashrc.d")" ]; then
-        cp "${HOME}/.bashrc.d/wallpapermaison.sh" "${PERSISTENT_NFS}/.bashrc.d/wallpapermaison.sh"
-    fi
-fi
-echo "✓ Shell & auto-guérison configurés dans ~/.bashrc.d/wallpapermaison.sh."
 
 # ------------------------------------------------------------------------------
 # 9. Déploiement de l'Extension VS Code
@@ -357,31 +311,9 @@ echo "--- [6/6] Déploiement de l'extension VS Code ---"
 EXT_SRC="${SCRIPT_DIR}/vscode-extension"
 
 if [ -d "$EXT_SRC" ]; then
-    # Cible 1 : Emplacement personnalisé de l'extension
-    TARGET_VAR_TMP="/var/tmp/visual_extensions/budicuy.live-wallpaper-99.0.0"
-    rm -rf "/var/tmp/visual_extensions/budicuy.live-wallpaper-1.0.9" 2>/dev/null || true
-    if [ "$(realpath -m "$EXT_SRC")" != "$(realpath -m "$TARGET_VAR_TMP")" ]; then
-        mkdir -p "$TARGET_VAR_TMP"
-        cp -r "$EXT_SRC"/* "$TARGET_VAR_TMP/" 2>/dev/null || true
-    fi
-
-    # Cible 2 : Emplacement standard VS Code
     TARGET_VSCODE_EXT="${HOME}/.vscode/extensions/budicuy.live-wallpaper-99.0.0"
-    rm -rf "${HOME}/.vscode/extensions/budicuy.live-wallpaper-1.0.9" 2>/dev/null || true
-    if [ "$(realpath -m "$EXT_SRC")" != "$(realpath -m "$TARGET_VSCODE_EXT")" ]; then
-        mkdir -p "$TARGET_VSCODE_EXT"
-        cp -r "$EXT_SRC"/* "$TARGET_VSCODE_EXT/" 2>/dev/null || true
-    fi
-
-    if [ "$IS_PERSISTENT" = true ]; then
-        TARGET_NFS_EXT="${PERSISTENT_NFS}/.vscode/extensions/budicuy.live-wallpaper-99.0.0"
-        rm -rf "${PERSISTENT_NFS}/.vscode/extensions/budicuy.live-wallpaper-1.0.9" 2>/dev/null || true
-        if [ "$(realpath -m "$EXT_SRC")" != "$(realpath -m "$TARGET_NFS_EXT")" ]; then
-            mkdir -p "$TARGET_NFS_EXT"
-            cp -r "$EXT_SRC"/* "$TARGET_NFS_EXT/" 2>/dev/null || true
-        fi
-    fi
-
+    mkdir -p "$TARGET_VSCODE_EXT"
+    cp -r "$EXT_SRC"/. "$TARGET_VSCODE_EXT/"
     # Déploiement de root-shell
     if [ -f "${SCRIPT_DIR}/scripts/root-shell" ]; then
         mkdir -p "${HOME}/.local/bin"
@@ -403,7 +335,6 @@ if [ -d "$EXT_SRC" ]; then
     fi
 
     echo "✓ Extension VS Code déployée :"
-    echo "  - ${TARGET_VAR_TMP}"
     echo "  - ${TARGET_VSCODE_EXT}"
 else
     echo "ℹ️  Dossier vscode-extension non trouvé dans ${SCRIPT_DIR}."
@@ -469,7 +400,7 @@ HANABI_TARGET="${HOME}/.local/share/gnome-shell/extensions/${HANABI_UUID}"
 SCHEMAS_TARGET="${HOME}/.local/share/glib-2.0/schemas"
 
 # Nettoyer les anciens workers MPV externes en tâche de fond
-pkill -9 -f "video_bg_worker.py" 2>/dev/null || true
+
 
 if [ -d "$HANABI_SRC" ]; then
     mkdir -p "$(dirname "$HANABI_TARGET")"
@@ -574,69 +505,14 @@ fi
 echo ""
 echo "[11/12] Configuration et injection native dans Visual Studio Code..."
 
-VSC_USER_DIR="${HOME}/.local/share/vscode"
-if [ "$IS_PERSISTENT" = true ]; then
-    VSC_USER_DIR="${PERSISTENT_NFS}/.local/share/vscode"
+# Installe un lanceur distinct et conserve la commande système `code`.
+install -m 755 "${SCRIPT_DIR}/scripts/code-launcher.sh" "${HOME}/.local/bin/wallpapermaison-code"
+# Réparer uniquement les lanceurs écrits par une ancienne version du projet.
+if [ -f "${HOME}/.local/bin/code" ] && grep -q 'Visual Studio Code Portable Launcher avec Live Wallpaper' "${HOME}/.local/bin/code"; then
+    rm -f "${HOME}/.local/bin/code"
 fi
-
-if [ -d "/usr/apps/VSCode-linux-x64" ]; then
-    mkdir -p "${VSC_USER_DIR}"
-    if [ ! -f "${VSC_USER_DIR}/bin/code" ]; then
-        cp -as /usr/apps/VSCode-linux-x64/* "${VSC_USER_DIR}/" 2>/dev/null || true
-    fi
-    WB_TARGET="${VSC_USER_DIR}/resources/app/out/vs/code/electron-browser/workbench/workbench.html"
-    if [ -L "${WB_TARGET}" ] || [ ! -f "${WB_TARGET}" ]; then
-        rm -f "${WB_TARGET}"
-        cp /usr/apps/VSCode-linux-x64/resources/app/out/vs/code/electron-browser/workbench/workbench.html "${WB_TARGET}" 2>/dev/null || true
-        chmod 664 "${WB_TARGET}" 2>/dev/null || true
-    fi
-fi
-
-# Patcher le workbench pour toute installation de VS Code détectée
-if [ -f "${SCRIPT_DIR}/scripts/patch_vscode_html.py" ]; then
-    python3 "${SCRIPT_DIR}/scripts/patch_vscode_html.py" 2>/dev/null || true
-fi
-
-if [ "$IS_PERSISTENT" = true ]; then
-    mkdir -p "${PERSISTENT_NFS}/.vscode/extensions" "${PERSISTENT_NFS}/.config/Code/User" "${PERSISTENT_NFS}/.local/share/applications" "${PERSISTENT_NFS}/.local/bin"
-    [ -d "${HOME}/.vscode/extensions" ] && cp -ru "${HOME}/.vscode/extensions/"* "${PERSISTENT_NFS}/.vscode/extensions/" 2>/dev/null || true
-    [ -f "${HOME}/.config/Code/User/settings.json" ] && cp -u "${HOME}/.config/Code/User/settings.json" "${PERSISTENT_NFS}/.config/Code/User/settings.json" 2>/dev/null || true
-fi
-
-mkdir -p "${HOME}/.local/share/applications" "${HOME}/.local/bin"
-
-if [ -f "${SCRIPT_DIR}/scripts/code-launcher.sh" ]; then
-    cp -f "${SCRIPT_DIR}/scripts/code-launcher.sh" "${HOME}/.local/bin/code"
-    chmod +x "${HOME}/.local/bin/code"
-    if [ "$IS_PERSISTENT" = true ]; then
-        mkdir -p "${PERSISTENT_NFS}/.local/bin"
-        if [ "$(realpath -m "${HOME}/.local/bin/code")" != "$(realpath -m "${PERSISTENT_NFS}/.local/bin/code")" ]; then
-            cp -f "${SCRIPT_DIR}/scripts/code-launcher.sh" "${PERSISTENT_NFS}/.local/bin/code" 2>/dev/null || true
-        fi
-        chmod +x "${PERSISTENT_NFS}/.local/bin/code" 2>/dev/null || true
-    fi
-fi
-
-for desk_name in vscode.desktop code.desktop; do
-    cat << 'EOF' > "${HOME}/.local/share/applications/${desk_name}"
-[Desktop Entry]
-Name=Visual Studio Code
-Comment=Code Editing. Redefined.
-GenericName=Text Editor
-Exec=bash -c 'exec "$HOME/.local/bin/code" %F'
-Icon=vscode
-Type=Application
-StartupNotify=false
-StartupWMClass=code
-Categories=TextEditor;Development;IDE;
-MimeType=text/plain;inode/directory;application/x-code-workspace;
-Keywords=vscode;
-EOF
-    if [ "$IS_PERSISTENT" = true ] && [ -d "${PERSISTENT_NFS}/.local/share/applications" ]; then
-        cp -f "${HOME}/.local/share/applications/${desk_name}" "${PERSISTENT_NFS}/.local/share/applications/${desk_name}" 2>/dev/null || true
-    fi
-done
-echo "✓ Visual Studio Code configuré avec lanceur portable, injection native et Terminal Sudo Root"
+python3 "${SCRIPT_DIR}/scripts/write_desktop_entries.py" "$SCRIPT_DIR"
+echo "✓ Lanceur WallpaperMaison pour VS Code installé."
 
 # ------------------------------------------------------------------------------
 # 12. Rapport de validation & Auto-Test
@@ -683,5 +559,5 @@ echo "Pour démarrer WallpaperMaison maintenant :"
 echo "  ${SCRIPT_DIR}/scripts/run.sh"
 echo ""
 echo "Pour vérifier le statut du service d'arrière-plan :"
-echo "  systemctl --user status wallpapermaison.service"
+echo "  cat ~/.cache/wallpapermaison/logs/session-start.log"
 echo ""

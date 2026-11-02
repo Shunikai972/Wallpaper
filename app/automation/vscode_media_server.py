@@ -18,7 +18,7 @@ from urllib.request import ProxyHandler, build_opener
 EXTENSION_ROOT = Path(
     os.environ.get(
         "WALLPAPERMAISON_VSCODE_EXT_DIR",
-        "/var/tmp/visual_extensions/budicuy.live-wallpaper-99.0.0",
+        str(Path.home() / ".vscode/extensions/budicuy.live-wallpaper-99.0.0"),
     )
 ).expanduser()
 MEDIA_ROOT = Path(

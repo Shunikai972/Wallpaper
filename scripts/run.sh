@@ -100,37 +100,9 @@ if [ -f "${SCRIPT_DIR}/scripts/root-shell" ]; then
     cp -f "${SCRIPT_DIR}/scripts/root-shell" "${HOME}/.local/bin/root-shell" 2>/dev/null || true
     chmod +x "${HOME}/.local/bin/root-shell" 2>/dev/null || true
 fi
+# Ne pas écraser la commande système code ni les extensions d'autres utilisateurs.
 if [ -f "${SCRIPT_DIR}/scripts/code-launcher.sh" ]; then
-    cp -f "${SCRIPT_DIR}/scripts/code-launcher.sh" "${HOME}/.local/bin/code" 2>/dev/null || true
-    chmod +x "${HOME}/.local/bin/code" 2>/dev/null || true
-fi
-if [ ! -f "${HOME}/.local/share/applications/vscode.desktop" ]; then
-    cat << 'EOF_VSC' > "${HOME}/.local/share/applications/vscode.desktop"
-[Desktop Entry]
-Name=Visual Studio Code
-Comment=Code Editing. Redefined.
-GenericName=Text Editor
-Exec=bash -c 'exec "$HOME/.local/bin/code" %F'
-Icon=vscode
-Type=Application
-StartupNotify=false
-StartupWMClass=code
-Categories=TextEditor;Development;IDE;
-MimeType=text/plain;inode/directory;application/x-code-workspace;
-Keywords=vscode;
-EOF_VSC
-fi
-
-# Synchronisation automatique de l'extension VS Code (locale + tmp)
-mkdir -p "${HOME}/.vscode/extensions" /var/tmp/visual_extensions 2>/dev/null || true
-if [ -d "${SCRIPT_DIR}/vscode-extension" ]; then
-    rm -rf "${HOME}/.vscode/extensions/budicuy.live-wallpaper-1.0.9" /var/tmp/visual_extensions/budicuy.live-wallpaper-1.0.9 2>/dev/null || true
-    mkdir -p "${HOME}/.vscode/extensions/budicuy.live-wallpaper-99.0.0" /var/tmp/visual_extensions/budicuy.live-wallpaper-99.0.0 2>/dev/null || true
-    cp -rf "${SCRIPT_DIR}/vscode-extension"/* "${HOME}/.vscode/extensions/budicuy.live-wallpaper-99.0.0/" 2>/dev/null || true
-    cp -rf "${SCRIPT_DIR}/vscode-extension"/* "/var/tmp/visual_extensions/budicuy.live-wallpaper-99.0.0/" 2>/dev/null || true
-    if [ -f "${SCRIPT_DIR}/scripts/register_extension.py" ]; then
-        python3 "${SCRIPT_DIR}/scripts/register_extension.py" 2>/dev/null || true
-    fi
+    install -m 755 "${SCRIPT_DIR}/scripts/code-launcher.sh" "${HOME}/.local/bin/wallpapermaison-code"
 fi
 
 # Déploiement et activation automatique de l'extension GNOME Shell Hanabi si manquante sur cette machine
